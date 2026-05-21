@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js/lib/common'
+import { slugify } from './outline'
 
 function highlight(str: string, lang: string): string {
   if (lang && hljs.getLanguage(lang)) {
@@ -31,6 +32,33 @@ export const md: MarkdownIt = new MarkdownIt({
   typographer: true,
   highlight
 })
+
+// Inject an `id` on every heading so the OutlinePanel can anchor-jump to it.
+// Slug logic mirrors lib/outline.ts so outline.slug === heading.id. Per-render
+// duplicate counts live in `env` (markdown-it creates a fresh `env` per call
+// to md.render when none is passed).
+const defaultHeadingOpen = md.renderer.rules.heading_open
+md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx]
+  const inline = tokens[idx + 1]
+  if (inline?.type === 'inline') {
+    const text =
+      inline.children
+        ?.filter((c) => c.type === 'text' || c.type === 'code_inline')
+        .map((c) => c.content)
+        .join('')
+        .trim() ?? ''
+    const counts: Map<string, number> =
+      env.__slugCounts ?? (env.__slugCounts = new Map<string, number>())
+    const base = slugify(text) || `heading-${token.map?.[0] ?? 0}`
+    const seen = counts.get(base) ?? 0
+    counts.set(base, seen + 1)
+    token.attrSet('id', seen === 0 ? base : `${base}-${seen}`)
+  }
+  return defaultHeadingOpen
+    ? defaultHeadingOpen(tokens, idx, options, env, self)
+    : self.renderToken(tokens, idx, options)
+}
 
 export function render(source: string): string {
   return md.render(source)
