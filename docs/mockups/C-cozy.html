@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>方案 C · 现代温润 — Quill</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&family=Instrument+Serif:ital@0;1&family=Noto+Sans+SC:wght@300..700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:           oklch(0.985 0.005 75);
+    --bg-1:         oklch(0.966 0.006 75);
+    --bg-2:         oklch(0.942 0.008 72);
+    --bg-3:         oklch(0.918 0.010 70);
+    --ink:          oklch(0.220 0.010 60);
+    --ink-1:        oklch(0.380 0.012 60);
+    --ink-2:        oklch(0.520 0.010 60);
+    --ink-3:        oklch(0.680 0.008 60);
+    --ink-4:        oklch(0.820 0.006 60);
+    --rule:         oklch(0.900 0.008 65);
+    --rule-soft:    oklch(0.940 0.006 70);
+    --accent:       oklch(0.700 0.135 68);
+    --accent-soft:  oklch(0.948 0.040 70);
+    --accent-ink:   oklch(0.420 0.115 60);
+    --shadow-sm:    0 1px 2px rgba(60,40,20,0.06), 0 1px 3px rgba(60,40,20,0.05);
+    --shadow-md:    0 2px 4px rgba(60,40,20,0.06), 0 8px 24px -8px rgba(60,40,20,0.12);
+  }
+  .dark-theme{
+    --bg:           oklch(0.205 0.010 68);
+    --bg-1:         oklch(0.238 0.010 68);
+    --bg-2:         oklch(0.272 0.010 68);
+    --bg-3:         oklch(0.310 0.012 68);
+    --ink:          oklch(0.950 0.008 75);
+    --ink-1:        oklch(0.830 0.008 70);
+    --ink-2:        oklch(0.680 0.010 68);
+    --ink-3:        oklch(0.520 0.010 68);
+    --ink-4:        oklch(0.380 0.010 68);
+    --rule:         oklch(0.330 0.012 68);
+    --rule-soft:    oklch(0.285 0.012 68);
+    --accent:       oklch(0.795 0.145 75);
+    --accent-soft:  oklch(0.310 0.075 68);
+    --accent-ink:   oklch(0.880 0.130 75);
+    --shadow-sm:    0 1px 2px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.30);
+    --shadow-md:    0 4px 8px rgba(0,0,0,0.30), 0 12px 32px -8px rgba(0,0,0,0.45);
+  }
+  html,body{background:#e8e2d3;}
+  body{font-family:'Manrope','Noto Sans SC',-apple-system,system-ui,sans-serif;color:#3a2f1f;font-feature-settings:"ss01","ss02";}
+  .serif{font-family:'Instrument Serif',serif;}
+  .serif-it{font-family:'Instrument Serif',serif;font-style:italic;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+  .surface{background:var(--bg);color:var(--ink);}
+  .surface-1{background:var(--bg-1);}
+  .surface-2{background:var(--bg-2);}
+  .surface-3{background:var(--bg-3);}
+  .ink{color:var(--ink);}.ink-1{color:var(--ink-1);}.ink-2{color:var(--ink-2);}.ink-3{color:var(--ink-3);}.ink-4{color:var(--ink-4);}
+  .accent{color:var(--accent);} .accent-ink{color:var(--accent-ink);} .bg-accent{background:var(--accent);} .bg-accent-soft{background:var(--accent-soft);}
+  .rule-b{border-bottom:1px solid var(--rule);}
+  .rule-r{border-right:1px solid var(--rule);}
+  .frame{border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(60,40,20,0.10), 0 24px 60px -20px rgba(60,40,20,0.30), 0 8px 20px -10px rgba(60,40,20,0.20);}
+  .frame-dark{border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.30), 0 24px 60px -20px rgba(0,0,0,0.55), 0 8px 20px -10px rgba(0,0,0,0.4);}
+  .card{background:var(--bg-1);border-radius:12px;box-shadow:var(--shadow-sm);transition:transform .15s ease, box-shadow .15s ease;}
+  .card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);}
+  .card:active{transform:scale(0.985);}
+  .btn-primary{background:var(--accent);color:var(--accent-ink);padding:10px 18px;border-radius:10px;font-weight:600;font-size:13.5px;transition:transform .08s;box-shadow:var(--shadow-sm);}
+  .btn-primary:active{transform:scale(0.96);}
+  .btn-ghost{color:var(--ink-1);padding:10px 16px;border-radius:10px;font-weight:500;font-size:13.5px;transition:background .15s, transform .08s;}
+  .btn-ghost:hover{background:var(--bg-2);}
+  .btn-ghost:active{transform:scale(0.96);}
+  .kbd{font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 7px;background:var(--bg-2);color:var(--ink-2);border-radius:5px;}
+  .pill-group{display:flex;background:var(--bg-2);padding:3px;border-radius:999px;gap:1px;}
+  .pill-group button{padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:500;color:var(--ink-2);transition:all .15s;}
+  .pill-group button.active{background:var(--bg);color:var(--ink);box-shadow:var(--shadow-sm);font-weight:600;}
+  .pill-group button:not(.active):hover{color:var(--ink);}
+  .file-row{padding:6px 10px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .12s;}
+  .file-row:hover{background:var(--bg-2);}
+  .file-active{background:var(--accent-soft);color:var(--accent-ink);position:relative;}
+  .file-active::before{content:"";position:absolute;left:-4px;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--accent);}
+  .file-icon{width:13px;height:13px;flex-shrink:0;opacity:0.55;}
+  .file-icon-md{color:var(--accent);opacity:1;}
+  .dim-file{color:var(--ink-4);opacity:0.7;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);}
+  .traffic{display:inline-flex;gap:8px;align-items:center;}
+  .traffic span{width:12px;height:12px;border-radius:50%;display:block;}
+  .traffic .r{background:#ff5f57;} .traffic .y{background:#febc2e;} .traffic .g{background:#28c840;}
+  .editor-line{font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.9;color:var(--ink);}
+  .syn-comment{color:var(--ink-3);}
+  .syn-h{color:var(--accent);font-weight:600;}
+  .syn-bold{color:var(--ink);font-weight:700;}
+  .syn-list{color:var(--ink-3);}
+  .syn-quote{color:var(--ink-2);font-style:italic;}
+  .syn-link{color:var(--accent);text-decoration:underline;text-decoration-thickness:1px;text-decoration-color:var(--ink-4);}
+  .gutter{width:14px;flex-shrink:0;text-align:right;padding-right:14px;color:var(--ink-4);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.9;user-select:none;}
+  .prose-c{color:var(--ink);font-family:'Manrope','Noto Sans SC',sans-serif;}
+  .prose-c h1{font-family:'Instrument Serif','Noto Sans SC',serif;font-size:40px;font-weight:400;letter-spacing:-0.015em;margin:0 0 6px;line-height:1.15;color:var(--ink);}
+  .prose-c .meta{font-family:'Instrument Serif',serif;font-style:italic;font-size:14px;color:var(--ink-2);margin-bottom:24px;display:block;}
+  .prose-c h2{font-size:18px;font-weight:700;letter-spacing:-0.005em;margin:32px 0 12px;color:var(--ink);}
+  .prose-c h2::before{content:"§";color:var(--accent);font-family:'Instrument Serif',serif;font-style:italic;font-size:22px;margin-right:6px;vertical-align:-1px;}
+  .prose-c p{font-size:14.5px;line-height:1.7;margin:0 0 14px;color:var(--ink-1);}
+  .prose-c code{font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--bg-2);padding:1px 6px;border-radius:5px;color:var(--accent-ink);}
+  .prose-c blockquote{font-size:13.5px;border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;border-radius:0 8px 8px 0;color:var(--ink-1);margin:0 0 14px;font-style:normal;}
+  .prose-c ol{counter-reset:n;list-style:none;padding:0;margin:0 0 14px;}
+  .prose-c ol li{counter-increment:n;font-size:14.5px;line-height:1.7;color:var(--ink-1);padding:4px 0 4px 30px;position:relative;}
+  .prose-c ol li::before{content:counter(n);font-family:'Instrument Serif',serif;font-style:italic;font-size:18px;color:var(--accent);position:absolute;left:6px;top:2px;font-weight:400;}
+  .prose-c strong{color:var(--ink);font-weight:700;}
+  .prose-c .task{display:flex;gap:10px;align-items:center;font-size:14px;padding:4px 0;color:var(--ink-1);}
+  .prose-c .task .box{width:18px;height:18px;border:1.5px solid var(--ink-3);border-radius:5px;flex-shrink:0;transition:all .12s;display:flex;align-items:center;justify-content:center;}
+  .prose-c .task .box.done{background:var(--accent);border-color:var(--accent);}
+  .prose-c .task .box.done::after{content:"✓";color:var(--accent-ink);font-size:12px;font-weight:700;}
+  .prose-c .task.done{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--ink-4);}
+  .section-label{font-size:11px;color:#8a7d68;text-transform:uppercase;letter-spacing:0.16em;font-weight:600;}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg-2);color:var(--ink-1);border-radius:999px;font-size:12.5px;font-weight:500;}
+  .chip .dot{width:6px;height:6px;}
+</style>
+</head>
+<body>
+
+<header class="max-w-[1400px] mx-auto px-12 pt-16 pb-10">
+  <p class="text-[12px] uppercase tracking-[0.18em] text-amber-900/70 font-bold">Quill UI · MOCKUP</p>
+  <h1 class="text-[58px] leading-[1.04] tracking-[-0.025em] text-stone-900 mt-3 font-extrabold">
+    方案 C <span class="serif-it font-normal text-amber-800">· 现代温润</span>
+  </h1>
+  <p class="text-[16px] text-stone-700 leading-[1.7] max-w-[680px] mt-5 font-medium">
+    Manrope 几何无衬 + Instrument Serif 斜体标题点缀。色温整体偏暖 (色相 60-75 之间)，
+    强调色是一抹琥珀。圆角分级 (12 / 10 / 999)，柔和投影做层级，按下整体 scale(0.96)。
+  </p>
+  <div class="mt-6 flex flex-wrap gap-2">
+    <span class="px-3 py-1 rounded-full bg-stone-900 text-white text-[12px]">Manrope · Instrument Serif · Noto Sans SC</span>
+    <span class="px-3 py-1 rounded-full bg-stone-200 text-stone-700 text-[12px]">圆角 12 / 10 / 999</span>
+    <span class="px-3 py-1 rounded-full bg-stone-200 text-stone-700 text-[12px]">琥珀强调 oklch(0.70 0.135 68)</span>
+    <span class="px-3 py-1 rounded-full bg-stone-200 text-stone-700 text-[12px]">柔和投影分层</span>
+  </div>
+</header>
+
+<!-- ============== LIGHT — HOME ============== -->
+<section class="max-w-[1400px] mx-auto px-12 pb-8">
+  <p class="section-label mb-3">Light · 首页 / 空状态</p>
+  <div class="frame surface" style="height:680px;width:100%;">
+    <div class="h-9 surface-1 rule-b flex items-center px-3">
+      <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="ml-auto mr-3 serif-it text-[15px] ink-2">Quill</div>
+    </div>
+
+    <div class="flex h-[calc(100%-36px)]">
+      <!-- left hero -->
+      <div class="flex-1 flex flex-col justify-center px-16">
+        <div class="serif-it text-[16px] accent-ink mb-2">a quiet desk for</div>
+        <h2 class="text-[88px] leading-none font-extrabold ink tracking-[-0.04em]">写<span class="serif-it font-normal accent">·</span>作</h2>
+        <p class="text-[15px] ink-2 mt-6 max-w-[420px] leading-[1.7] font-medium">
+          打开一个文件夹当作 vault，或者直接拖一份 markdown 进来。
+          没有 tab，没有分散注意力的东西，只有你和文字。
+        </p>
+        <div class="flex gap-3 mt-10">
+          <button class="btn-primary flex items-center gap-2">
+            打开文件夹 <span class="kbd" style="background:rgba(0,0,0,0.1);color:inherit">⌘⇧O</span>
+          </button>
+          <button class="btn-ghost flex items-center gap-2" style="background:var(--bg-1)">
+            打开文件 <span class="kbd">⌘O</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- right recent -->
+      <aside class="w-[420px] surface-1 p-7 flex flex-col" style="border-left:1px solid var(--rule)">
+        <div class="flex items-center justify-between mb-5">
+          <div>
+            <p class="section-label">最近</p>
+            <p class="serif-it text-[18px] ink mt-1">picking up where you left off</p>
+          </div>
+        </div>
+
+        <ul class="space-y-2 flex-1 overflow-auto">
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center accent-ink font-bold text-[14px]">N</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">notes</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/notes · 38 files</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">昨天</span>
+          </li>
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-[var(--bg-2)] flex items-center justify-center ink-1 mono text-[13px] font-bold">md</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">spec.md</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/work/spec.md</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">3 天前</span>
+          </li>
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center accent-ink font-bold text-[14px]">Q</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">quill / docs</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/work/code/quill/docs</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">上周</span>
+          </li>
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center accent-ink font-bold text-[14px]">J</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">journal · 2026</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/journal/2026</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">上周</span>
+          </li>
+        </ul>
+
+        <div class="mt-5 rounded-[12px] py-5 px-4 text-center" style="border:1.5px dashed var(--rule)">
+          <p class="text-[13px] ink-2 font-medium">或者，把 .md 拖到任何地方</p>
+          <p class="text-[11px] ink-3 mt-1 mono">drag & drop anywhere</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============== LIGHT — WORKSPACE ============== -->
+<section class="max-w-[1400px] mx-auto px-12 pb-8">
+  <p class="section-label mb-3">Light · Workspace</p>
+  <div class="frame surface" style="height:800px;width:100%;">
+    <div class="h-9 surface-1 rule-b flex items-center px-3">
+      <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="flex-1 text-center serif-it text-[14px] ink-2">quill · docs · <span class="ink-1">ui-design.md</span></div>
+      <div class="w-16"></div>
+    </div>
+
+    <div class="flex" style="height:calc(100% - 36px - 32px);">
+      <!-- sidebar -->
+      <aside class="w-[268px] surface-1 rule-r flex flex-col">
+        <div class="px-5 py-4 flex items-center gap-2">
+          <div class="w-8 h-8 rounded-[9px] bg-accent flex items-center justify-center" style="color:var(--accent-ink)">
+            <span class="serif font-bold text-[18px]" style="line-height:1">Q</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-bold ink truncate">docs</div>
+            <div class="text-[11px] ink-3 mono truncate">~/work/code/quill/docs</div>
+          </div>
+        </div>
+
+        <div class="px-3 py-2">
+          <div class="flex items-center gap-2 surface-2 rounded-[10px] px-3 py-2">
+            <span class="ink-3 text-[12px]">⌕</span>
+            <input type="text" placeholder="搜索…" class="flex-1 bg-transparent text-[12.5px] outline-none ink placeholder:text-[var(--ink-3)]" />
+            <span class="kbd">⌘K</span>
+          </div>
+        </div>
+
+        <nav class="flex-1 overflow-auto px-3 py-2 text-[13px]">
+          <div class="px-2 py-1 flex items-center justify-between">
+            <span class="section-label text-[10px]">docs</span>
+            <span class="ink-4 text-[11px]">▾</span>
+          </div>
+          <ul class="space-y-0.5 mb-3">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>architecture.md</span></li>
+            <li class="file-row file-active"><span class="file-icon file-icon-md">▸</span><span class="font-semibold flex-1">ui-design.md</span><span class="dot"></span></li>
+          </ul>
+
+          <div class="px-2 py-1 flex items-center justify-between">
+            <span class="section-label text-[10px]">daily</span>
+            <span class="ink-4 text-[11px]">▾</span>
+          </div>
+          <ul class="space-y-0.5 mb-3">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>2026-05-21.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>2026-05-20.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>2026-05-19.md</span></li>
+          </ul>
+
+          <div class="px-2 py-1 flex items-center justify-between">
+            <span class="section-label text-[10px]">ideas</span>
+            <span class="ink-4 text-[11px]">▾</span>
+          </div>
+          <ul class="space-y-0.5 mb-3">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>quill-roadmap.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>plugin-system.md</span></li>
+            <li class="file-row dim-file"><span class="file-icon">▪</span><span>mockup.png</span></li>
+          </ul>
+
+          <ul class="space-y-0.5">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>README.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>shopping.md</span></li>
+          </ul>
+        </nav>
+
+        <div class="px-4 py-3 flex items-center gap-3 rule-b" style="border-top:1px solid var(--rule);border-bottom:0">
+          <div class="w-7 h-7 rounded-full bg-accent-soft flex items-center justify-center text-[11px] font-bold accent-ink">C</div>
+          <div class="flex-1">
+            <div class="text-[12px] font-semibold ink">cheney</div>
+            <div class="text-[10.5px] ink-3 mono">写了 1,234 字 / 今天</div>
+          </div>
+          <button class="ink-3 hover:ink-1 text-[14px]">☼</button>
+        </div>
+      </aside>
+
+      <!-- main -->
+      <main class="flex-1 flex flex-col min-w-0">
+        <div class="h-14 rule-b flex items-center px-6 surface">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="serif-it text-[14px] ink-3">docs /</span>
+            <span class="text-[15px] font-bold ink truncate">ui-design.md</span>
+            <span class="dot ml-1"></span>
+          </div>
+          <div class="ml-6 chip">
+            <span class="dot" style="background:var(--accent)"></span>
+            未保存
+          </div>
+          <div class="ml-auto flex items-center gap-2">
+            <div class="pill-group">
+              <button>编辑</button>
+              <button class="active">分栏</button>
+              <button>预览</button>
+            </div>
+            <button class="btn-ghost text-[13px] px-3">⇣ 导出</button>
+          </div>
+        </div>
+
+        <div class="flex-1 flex min-h-0">
+          <!-- editor -->
+          <div class="flex-1 min-w-0 overflow-auto rule-r" style="background:var(--bg)">
+            <div class="px-8 py-8">
+              <div class="flex"><div class="gutter">1</div><div class="editor-line"><span class="syn-h"># Quill UI 重构笔记</span></div></div>
+              <div class="flex"><div class="gutter">2</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">3</div><div class="editor-line"><span class="syn-quote">&gt; 2026-05-21 · 周四</span></div></div>
+              <div class="flex"><div class="gutter">4</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">5</div><div class="editor-line">今天和 Claude 一起把整个 UI 风格重新梳理了一遍。</div></div>
+              <div class="flex"><div class="gutter">6</div><div class="editor-line">之前那套全 neutral 色 + Inter 的组合，基本就是默认值</div></div>
+              <div class="flex"><div class="gutter">7</div><div class="editor-line">的产物 —— 能用，但没有性格。</div></div>
+              <div class="flex"><div class="gutter">8</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">9</div><div class="editor-line"><span class="syn-h">## 三个方向</span></div></div>
+              <div class="flex"><div class="gutter">10</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">11</div><div class="editor-line">1. <span class="syn-bold">**纸感编辑器**</span> — 暖白底 + 衬线大标题</div></div>
+              <div class="flex"><div class="gutter">12</div><div class="editor-line">2. <span class="syn-bold">**极简野性**</span> — 锐角 + 等宽 + 高对比</div></div>
+              <div class="flex"><div class="gutter">13</div><div class="editor-line">3. <span class="syn-bold">**现代温润**</span> — 中等圆角 + 暖灰 + 一点色彩</div></div>
+              <div class="flex"><div class="gutter">14</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">15</div><div class="editor-line"><span class="syn-h">## 待办</span></div></div>
+              <div class="flex"><div class="gutter">16</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">17</div><div class="editor-line"><span class="syn-list">- [x]</span> 列出现状问题</div></div>
+              <div class="flex"><div class="gutter">18</div><div class="editor-line"><span class="syn-list">- [ ]</span> 三个方案做出 HTML mock</div></div>
+              <div class="flex"><div class="gutter">19</div><div class="editor-line"><span class="syn-list">- [ ]</span> 选一个方向落地 React</div></div>
+            </div>
+          </div>
+
+          <!-- preview -->
+          <div class="flex-1 min-w-0 overflow-auto" style="background:var(--bg-1)">
+            <div class="px-10 py-10">
+              <div class="prose-c max-w-[560px]">
+                <p class="serif-it text-[14px] ink-3 mb-2">2026 / 05 / 21 · 周四</p>
+                <h1>Quill UI 重构笔记</h1>
+                <blockquote>关于色彩、字体和那些被默认值偷走的性格。</blockquote>
+                <p>今天和 Claude 一起把整个 UI 风格重新梳理了一遍。之前那套全 <code>neutral</code> 色 + Inter 的组合，基本就是默认值的产物 —— 能用，但没有性格。</p>
+                <h2>三个方向</h2>
+                <ol>
+                  <li><strong>纸感编辑器</strong> — 暖白底 + 衬线大标题</li>
+                  <li><strong>极简野性</strong> — 锐角 + 等宽 + 高对比</li>
+                  <li><strong>现代温润</strong> — 中等圆角 + 暖灰 + 一点色彩</li>
+                </ol>
+                <h2>待办</h2>
+                <div class="task done"><span class="box done"></span><span>列出现状问题</span></div>
+                <div class="task"><span class="box"></span><span>三个方案做出 HTML mock</span></div>
+                <div class="task"><span class="box"></span><span>选一个方向落地 React</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- status bar -->
+    <div class="h-8 surface-1 flex items-center px-5 text-[11.5px] ink-2 gap-4" style="border-top:1px solid var(--rule);">
+      <span><span class="ink font-semibold">1,234</span> 字</span>
+      <span class="ink-4">·</span>
+      <span class="accent flex items-center gap-1.5"><span class="dot"></span> 未保存</span>
+      <span class="ml-auto serif-it text-[13px]">Light · cheney's desk</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============== DARK — HOME ============== -->
+<section class="max-w-[1400px] mx-auto px-12 pb-8 mt-12">
+  <p class="section-label mb-3">Dark · 首页 / 空状态</p>
+  <div class="dark-theme frame-dark surface" style="height:680px;width:100%;">
+    <div class="h-9 surface-1 rule-b flex items-center px-3">
+      <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="ml-auto mr-3 serif-it text-[15px] ink-2">Quill</div>
+    </div>
+
+    <div class="flex h-[calc(100%-36px)]">
+      <div class="flex-1 flex flex-col justify-center px-16">
+        <div class="serif-it text-[16px] accent-ink mb-2">a quiet desk for</div>
+        <h2 class="text-[88px] leading-none font-extrabold ink tracking-[-0.04em]">写<span class="serif-it font-normal accent">·</span>作</h2>
+        <p class="text-[15px] ink-2 mt-6 max-w-[420px] leading-[1.7] font-medium">
+          打开一个文件夹当作 vault，或者直接拖一份 markdown 进来。
+          没有 tab，没有分散注意力的东西，只有你和文字。
+        </p>
+        <div class="flex gap-3 mt-10">
+          <button class="btn-primary flex items-center gap-2">
+            打开文件夹 <span class="kbd" style="background:rgba(0,0,0,0.2);color:inherit">⌘⇧O</span>
+          </button>
+          <button class="btn-ghost flex items-center gap-2" style="background:var(--bg-1)">
+            打开文件 <span class="kbd">⌘O</span>
+          </button>
+        </div>
+      </div>
+
+      <aside class="w-[420px] surface-1 p-7 flex flex-col" style="border-left:1px solid var(--rule)">
+        <div class="flex items-center justify-between mb-5">
+          <div>
+            <p class="section-label">最近</p>
+            <p class="serif-it text-[18px] ink mt-1">picking up where you left off</p>
+          </div>
+        </div>
+        <ul class="space-y-2 flex-1 overflow-auto">
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center accent-ink font-bold text-[14px]">N</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">notes</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/notes · 38 files</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">昨天</span>
+          </li>
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-[var(--bg-3)] flex items-center justify-center ink-1 mono text-[13px] font-bold">md</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">spec.md</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/work/spec.md</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">3 天前</span>
+          </li>
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center accent-ink font-bold text-[14px]">Q</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">quill / docs</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/work/code/quill/docs</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">上周</span>
+          </li>
+          <li class="card p-3.5 flex items-center gap-3 cursor-pointer">
+            <div class="w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center accent-ink font-bold text-[14px]">J</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-semibold ink truncate">journal · 2026</div>
+              <div class="text-[11.5px] ink-3 mt-0.5 mono">~/journal/2026</div>
+            </div>
+            <span class="serif-it text-[12px] ink-3">上周</span>
+          </li>
+        </ul>
+        <div class="mt-5 rounded-[12px] py-5 px-4 text-center" style="border:1.5px dashed var(--rule)">
+          <p class="text-[13px] ink-2 font-medium">或者，把 .md 拖到任何地方</p>
+          <p class="text-[11px] ink-3 mt-1 mono">drag & drop anywhere</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============== DARK — WORKSPACE ============== -->
+<section class="max-w-[1400px] mx-auto px-12 pb-16">
+  <p class="section-label mb-3">Dark · Workspace</p>
+  <div class="dark-theme frame-dark surface" style="height:800px;width:100%;">
+    <div class="h-9 surface-1 rule-b flex items-center px-3">
+      <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="flex-1 text-center serif-it text-[14px] ink-2">quill · docs · <span class="ink-1">ui-design.md</span></div>
+      <div class="w-16"></div>
+    </div>
+
+    <div class="flex" style="height:calc(100% - 36px - 32px);">
+      <aside class="w-[268px] surface-1 rule-r flex flex-col">
+        <div class="px-5 py-4 flex items-center gap-2">
+          <div class="w-8 h-8 rounded-[9px] bg-accent flex items-center justify-center" style="color:var(--accent-ink)">
+            <span class="serif font-bold text-[18px]" style="line-height:1">Q</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-bold ink truncate">docs</div>
+            <div class="text-[11px] ink-3 mono truncate">~/work/code/quill/docs</div>
+          </div>
+        </div>
+
+        <div class="px-3 py-2">
+          <div class="flex items-center gap-2 surface-2 rounded-[10px] px-3 py-2">
+            <span class="ink-3 text-[12px]">⌕</span>
+            <input type="text" placeholder="搜索…" class="flex-1 bg-transparent text-[12.5px] outline-none ink placeholder:text-[var(--ink-3)]" />
+            <span class="kbd">⌘K</span>
+          </div>
+        </div>
+
+        <nav class="flex-1 overflow-auto px-3 py-2 text-[13px]">
+          <div class="px-2 py-1 flex items-center justify-between">
+            <span class="section-label text-[10px]">docs</span><span class="ink-4 text-[11px]">▾</span>
+          </div>
+          <ul class="space-y-0.5 mb-3">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>architecture.md</span></li>
+            <li class="file-row file-active"><span class="file-icon file-icon-md">▸</span><span class="font-semibold flex-1">ui-design.md</span><span class="dot"></span></li>
+          </ul>
+          <div class="px-2 py-1 flex items-center justify-between">
+            <span class="section-label text-[10px]">daily</span><span class="ink-4 text-[11px]">▾</span>
+          </div>
+          <ul class="space-y-0.5 mb-3">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>2026-05-21.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>2026-05-20.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>2026-05-19.md</span></li>
+          </ul>
+          <div class="px-2 py-1 flex items-center justify-between">
+            <span class="section-label text-[10px]">ideas</span><span class="ink-4 text-[11px]">▾</span>
+          </div>
+          <ul class="space-y-0.5 mb-3">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>quill-roadmap.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>plugin-system.md</span></li>
+            <li class="file-row dim-file"><span class="file-icon">▪</span><span>mockup.png</span></li>
+          </ul>
+          <ul class="space-y-0.5">
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>README.md</span></li>
+            <li class="file-row"><span class="file-icon file-icon-md">▸</span><span>shopping.md</span></li>
+          </ul>
+        </nav>
+
+        <div class="px-4 py-3 flex items-center gap-3" style="border-top:1px solid var(--rule);">
+          <div class="w-7 h-7 rounded-full bg-accent-soft flex items-center justify-center text-[11px] font-bold accent-ink">C</div>
+          <div class="flex-1">
+            <div class="text-[12px] font-semibold ink">cheney</div>
+            <div class="text-[10.5px] ink-3 mono">写了 1,234 字 / 今天</div>
+          </div>
+          <button class="ink-3 text-[14px]">☾</button>
+        </div>
+      </aside>
+
+      <main class="flex-1 flex flex-col min-w-0">
+        <div class="h-14 rule-b flex items-center px-6 surface">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="serif-it text-[14px] ink-3">docs /</span>
+            <span class="text-[15px] font-bold ink truncate">ui-design.md</span>
+            <span class="dot ml-1"></span>
+          </div>
+          <div class="ml-6 chip">
+            <span class="dot"></span>
+            未保存
+          </div>
+          <div class="ml-auto flex items-center gap-2">
+            <div class="pill-group">
+              <button>编辑</button>
+              <button class="active">分栏</button>
+              <button>预览</button>
+            </div>
+            <button class="btn-ghost text-[13px] px-3">⇣ 导出</button>
+          </div>
+        </div>
+
+        <div class="flex-1 flex min-h-0">
+          <div class="flex-1 min-w-0 overflow-auto rule-r" style="background:var(--bg)">
+            <div class="px-8 py-8">
+              <div class="flex"><div class="gutter">1</div><div class="editor-line"><span class="syn-h"># Quill UI 重构笔记</span></div></div>
+              <div class="flex"><div class="gutter">2</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">3</div><div class="editor-line"><span class="syn-quote">&gt; 2026-05-21 · 周四</span></div></div>
+              <div class="flex"><div class="gutter">4</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">5</div><div class="editor-line">今天和 Claude 一起把整个 UI 风格重新梳理了一遍。</div></div>
+              <div class="flex"><div class="gutter">6</div><div class="editor-line">之前那套全 neutral 色 + Inter 的组合，基本就是默认值</div></div>
+              <div class="flex"><div class="gutter">7</div><div class="editor-line">的产物 —— 能用，但没有性格。</div></div>
+              <div class="flex"><div class="gutter">8</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">9</div><div class="editor-line"><span class="syn-h">## 三个方向</span></div></div>
+              <div class="flex"><div class="gutter">10</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">11</div><div class="editor-line">1. <span class="syn-bold">**纸感编辑器**</span> — 暖白底 + 衬线大标题</div></div>
+              <div class="flex"><div class="gutter">12</div><div class="editor-line">2. <span class="syn-bold">**极简野性**</span> — 锐角 + 等宽 + 高对比</div></div>
+              <div class="flex"><div class="gutter">13</div><div class="editor-line">3. <span class="syn-bold">**现代温润**</span> — 中等圆角 + 暖灰 + 一点色彩</div></div>
+              <div class="flex"><div class="gutter">14</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">15</div><div class="editor-line"><span class="syn-h">## 待办</span></div></div>
+              <div class="flex"><div class="gutter">16</div><div class="editor-line">&nbsp;</div></div>
+              <div class="flex"><div class="gutter">17</div><div class="editor-line"><span class="syn-list">- [x]</span> 列出现状问题</div></div>
+              <div class="flex"><div class="gutter">18</div><div class="editor-line"><span class="syn-list">- [ ]</span> 三个方案做出 HTML mock</div></div>
+              <div class="flex"><div class="gutter">19</div><div class="editor-line"><span class="syn-list">- [ ]</span> 选一个方向落地 React</div></div>
+            </div>
+          </div>
+
+          <div class="flex-1 min-w-0 overflow-auto" style="background:var(--bg-1)">
+            <div class="px-10 py-10">
+              <div class="prose-c max-w-[560px]">
+                <p class="serif-it text-[14px] ink-3 mb-2">2026 / 05 / 21 · 周四</p>
+                <h1>Quill UI 重构笔记</h1>
+                <blockquote>关于色彩、字体和那些被默认值偷走的性格。</blockquote>
+                <p>今天和 Claude 一起把整个 UI 风格重新梳理了一遍。之前那套全 <code>neutral</code> 色 + Inter 的组合，基本就是默认值的产物 —— 能用，但没有性格。</p>
+                <h2>三个方向</h2>
+                <ol>
+                  <li><strong>纸感编辑器</strong> — 暖白底 + 衬线大标题</li>
+                  <li><strong>极简野性</strong> — 锐角 + 等宽 + 高对比</li>
+                  <li><strong>现代温润</strong> — 中等圆角 + 暖灰 + 一点色彩</li>
+                </ol>
+                <h2>待办</h2>
+                <div class="task done"><span class="box done"></span><span>列出现状问题</span></div>
+                <div class="task"><span class="box"></span><span>三个方案做出 HTML mock</span></div>
+                <div class="task"><span class="box"></span><span>选一个方向落地 React</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div class="h-8 surface-1 flex items-center px-5 text-[11.5px] ink-2 gap-4" style="border-top:1px solid var(--rule);">
+      <span><span class="ink font-semibold">1,234</span> 字</span>
+      <span class="ink-4">·</span>
+      <span class="accent flex items-center gap-1.5"><span class="dot"></span> 未保存</span>
+      <span class="ml-auto serif-it text-[13px]">Dark · cheney's desk</span>
+    </div>
+  </div>
+</section>
+
+<footer class="max-w-[1400px] mx-auto px-12 pb-16 text-[12px] text-stone-600">
+  <a href="./index.html" class="hover:text-stone-900 underline-offset-4 hover:underline serif-it text-[14px]">← 返回三方案对比</a>
+</footer>
+
+</body>
+</html>

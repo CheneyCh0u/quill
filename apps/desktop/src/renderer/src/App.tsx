@@ -23,9 +23,9 @@ function Shell() {
   }, [save])
 
   return (
-    <div className="relative h-screen w-screen flex flex-col bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 overflow-hidden">
+    <div className="relative h-screen w-screen flex flex-col bg-[var(--paper)] text-[var(--ink)] overflow-hidden">
       <div
-        className="h-7 shrink-0 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-950/40"
+        className="h-7 shrink-0 border-b border-[var(--rule)] bg-[var(--paper-dim)]"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       />
 

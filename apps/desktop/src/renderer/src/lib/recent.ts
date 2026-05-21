@@ -20,6 +20,11 @@ export function addRecent(entry: Omit<RecentEntry, 'openedAt'>): void {
   localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX)))
 }
 
+export function removeRecent(path: string): void {
+  const list = getRecent().filter((e) => e.path !== path)
+  localStorage.setItem(KEY, JSON.stringify(list))
+}
+
 export function clearRecent(): void {
   localStorage.removeItem(KEY)
 }

@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -80,14 +80,28 @@ export function registerIpc(): void {
     return result.canceled ? null : result.filePaths[0]
   })
 
-  ipcMain.handle('dialog:saveFile', async (_evt, defaultName?: string) => {
-    const result = await dialog.showSaveDialog({
-      defaultPath: defaultName ?? 'untitled.md',
-      filters: [
-        { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }
-      ]
-    })
-    return result.canceled || !result.filePath ? null : result.filePath
+  ipcMain.handle(
+    'dialog:saveFile',
+    async (
+      _evt,
+      defaultName?: string,
+      filters?: Array<{ name: string; extensions: string[] }>
+    ) => {
+      const result = await dialog.showSaveDialog({
+        defaultPath: defaultName ?? 'untitled.md',
+        filters: filters ?? [
+          { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }
+        ]
+      })
+      return result.canceled || !result.filePath ? null : result.filePath
+    }
+  )
+
+  ipcMain.handle('shell:reveal', async (_evt, path: string) => {
+    // Open Finder/Explorer and highlight the file. No-op silently if the
+    // path no longer exists — Electron's showItemInFolder doesn't return,
+    // so just call it.
+    shell.showItemInFolder(path)
   })
 
   ipcMain.handle('fs:readFile', async (_evt, path: string) => {
@@ -96,6 +110,20 @@ export function registerIpc(): void {
 
   ipcMain.handle('fs:writeFile', async (_evt, path: string, content: string) => {
     await fs.writeFile(path, content, 'utf-8')
+  })
+
+  ipcMain.handle('fs:rename', async (_evt, oldPath: string, newPath: string) => {
+    if (oldPath === newPath) return
+    // Reject if target already exists — fs.rename silently overwrites on POSIX.
+    const exists = await fs
+      .stat(newPath)
+      .then(() => true)
+      .catch((err: NodeJS.ErrnoException) => {
+        if (err.code === 'ENOENT') return false
+        throw err
+      })
+    if (exists) throw new Error('TARGET_EXISTS')
+    await fs.rename(oldPath, newPath)
   })
 
   ipcMain.handle('fs:listDir', async (_evt, rootPath: string) => {

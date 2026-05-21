@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Quill UI · 三方案对比</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,30..100,0..1;1,9..144,300..900,30..100,0..1&family=Geist:wght@300..700&family=JetBrains+Mono:wght@400;600&family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;700;800&family=Noto+Sans+SC:wght@400;700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Geist','Noto Sans SC',-apple-system,system-ui,sans-serif;background:#1a1814;color:#e8e2d3;}
+  .serif-it{font-family:'Instrument Serif',serif;font-style:italic;}
+  .display-paper{font-family:'Fraunces','Noto Serif SC',serif;font-optical-sizing:auto;font-variation-settings:"SOFT" 80,"WONK" 1;}
+  .display-cozy{font-family:'Manrope',sans-serif;font-weight:800;letter-spacing:-0.04em;}
+  .display-brutalist{font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:-0.06em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .card-a{background:oklch(0.974 0.012 86);color:oklch(0.225 0.018 50);}
+  .card-b{background:#0c0d0e;color:#f3f3f0;border:1px solid #f3f3f0;}
+  .card-c{background:oklch(0.985 0.005 75);color:oklch(0.220 0.010 60);}
+  .accent-a{color:oklch(0.55 0.16 28);}
+  .accent-b{color:oklch(0.85 0.24 142);}
+  .accent-c{color:oklch(0.70 0.135 68);}
+  .swatch{width:28px;height:28px;border-radius:50%;display:inline-block;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1);}
+  .tile{transition:transform .25s ease;}
+  .tile:hover{transform:translateY(-6px);}
+  .arrow{transition:transform .2s;}
+  .tile:hover .arrow{transform:translateX(6px);}
+  .miniframe{border-radius:8px;overflow:hidden;box-shadow:0 8px 24px -8px rgba(0,0,0,0.3);}
+</style>
+</head>
+<body>
+
+<main class="max-w-[1400px] mx-auto px-12 py-16">
+
+  <header class="mb-16">
+    <p class="mono text-[11px] uppercase tracking-[0.24em] text-stone-500">QUILL // UI MOCKUP</p>
+    <h1 class="text-[64px] leading-[1.05] tracking-[-0.03em] font-extrabold text-stone-100 mt-3">
+      三个方向 <span class="serif-it text-stone-400 font-normal">· 任选其一往下推</span>
+    </h1>
+    <p class="text-[16px] text-stone-400 leading-[1.7] max-w-[680px] mt-5">
+      每个方案都做了亮色 + 暗色两套，含<strong class="text-stone-200 font-semibold">首页/空状态</strong> 和
+      <strong class="text-stone-200 font-semibold">Workspace（文件树 + 编辑 + 预览）</strong>。
+      点卡片进去看完整尺寸。三个方向在字体、圆角、密度、强调色、chrome 处理上都拉开了差距，不是"换个色"。
+    </p>
+  </header>
+
+  <div class="grid grid-cols-3 gap-6 mb-16">
+
+    <!-- A -->
+    <a href="./A-paper.html" class="tile block">
+      <div class="card-a rounded-[16px] p-7 h-full flex flex-col" style="min-height:520px;">
+        <div class="flex items-center justify-between">
+          <p class="mono text-[11px] uppercase tracking-[0.2em] text-stone-500">方案 A</p>
+          <span class="display-paper text-[13px] accent-a italic">paper</span>
+        </div>
+        <h2 class="display-paper text-[44px] leading-[1.05] mt-4" style="font-weight:500">纸感<br><em class="italic font-normal accent-a">编辑器</em></h2>
+        <p class="text-[13.5px] text-stone-700 leading-[1.65] mt-4" style="font-family:'Noto Serif SC',serif">
+          暖白纸底 + Fraunces 衬线大标题。chrome 几乎隐形，
+          只用纸感色阶分层，无 border、无阴影。
+        </p>
+
+        <div class="mt-5 space-y-1.5 text-[12px] text-stone-600" style="font-family:'Noto Serif SC',serif">
+          <div class="flex justify-between"><span class="mono text-[11px] text-stone-500 uppercase tracking-wider">font</span><span class="display-paper">Fraunces · Geist</span></div>
+          <div class="flex justify-between"><span class="mono text-[11px] text-stone-500 uppercase tracking-wider">radius</span><span class="mono">10px</span></div>
+          <div class="flex justify-between"><span class="mono text-[11px] text-stone-500 uppercase tracking-wider">accent</span><span class="flex items-center gap-2"><span class="swatch" style="background:oklch(0.55 0.16 28)"></span> 旧打字机红</span></div>
+          <div class="flex justify-between"><span class="mono text-[11px] text-stone-500 uppercase tracking-wider">vibe</span><span class="italic display-paper">安静、克制、文学</span></div>
+        </div>
+
+        <div class="mt-auto pt-6 flex items-center justify-between">
+          <span class="text-[13px] accent-a font-medium">查看完整 mock</span>
+          <span class="arrow accent-a text-[18px]">→</span>
+        </div>
+      </div>
+    </a>
+
+    <!-- B -->
+    <a href="./B-brutalist.html" class="tile block">
+      <div class="card-b rounded-[16px] p-7 h-full flex flex-col" style="min-height:520px;">
+        <div class="flex items-center justify-between">
+          <p class="mono text-[11px] uppercase tracking-[0.2em] text-neutral-500">DIR_02</p>
+          <span class="mono text-[11px] uppercase accent-b tracking-[0.15em]">▸ MONO</span>
+        </div>
+        <h2 class="display-brutalist text-[44px] leading-[1.0] mt-4">极简<span class="accent-b">.</span><br>野性</h2>
+        <p class="text-[13.5px] text-neutral-300 leading-[1.65] mt-4 mono">
+          // 全 JetBrains Mono + 锐角 + 单色酸性绿。<br>
+          // chrome 全部 hairline 裸露，信息密度优先。
+        </p>
+
+        <div class="mt-5 space-y-1.5 text-[12px] text-neutral-400 mono uppercase tracking-wider">
+          <div class="flex justify-between"><span class="text-neutral-600">FONT</span><span>JetBrains Mono</span></div>
+          <div class="flex justify-between"><span class="text-neutral-600">RADIUS</span><span>2PX</span></div>
+          <div class="flex justify-between items-center"><span class="text-neutral-600">ACCENT</span><span class="flex items-center gap-2 normal-case"><span class="swatch" style="background:oklch(0.85 0.24 142)"></span> ACID LIME</span></div>
+          <div class="flex justify-between"><span class="text-neutral-600">VIBE</span><span class="accent-b">/TERMINAL/SHARP/</span></div>
+        </div>
+
+        <div class="mt-auto pt-6 flex items-center justify-between">
+          <span class="mono text-[12px] accent-b uppercase tracking-wider">▸ VIEW FULL MOCK</span>
+          <span class="arrow accent-b mono text-[18px]">▸</span>
+        </div>
+      </div>
+    </a>
+
+    <!-- C -->
+    <a href="./C-cozy.html" class="tile block">
+      <div class="card-c rounded-[16px] p-7 h-full flex flex-col" style="min-height:520px;">
+        <div class="flex items-center justify-between">
+          <p class="text-[11px] uppercase tracking-[0.18em] text-stone-500 font-bold">方案 C</p>
+          <span class="serif-it text-[15px] accent-c">cozy</span>
+        </div>
+        <h2 class="display-cozy text-[44px] leading-[1.04] mt-4 text-stone-900">现代<span class="serif-it font-normal accent-c">·</span><br>温润</h2>
+        <p class="text-[13.5px] text-stone-700 leading-[1.65] mt-4 font-medium">
+          Manrope 几何无衬 + Instrument Serif 斜体点缀。
+          色温偏暖，琥珀强调，柔和投影做层级。
+        </p>
+
+        <div class="mt-5 space-y-1.5 text-[12px] text-stone-600">
+          <div class="flex justify-between items-baseline"><span class="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">font</span><span>Manrope · <span class="serif-it text-[14px] accent-c">Instrument</span></span></div>
+          <div class="flex justify-between"><span class="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">radius</span><span class="mono">12 / 10 / 999</span></div>
+          <div class="flex justify-between items-center"><span class="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">accent</span><span class="flex items-center gap-2"><span class="swatch" style="background:oklch(0.70 0.135 68)"></span> 琥珀</span></div>
+          <div class="flex justify-between"><span class="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">vibe</span><span class="serif-it text-[14px]">friendly, lived-in</span></div>
+        </div>
+
+        <div class="mt-auto pt-6 flex items-center justify-between">
+          <span class="text-[13px] accent-c font-semibold">查看完整 mock</span>
+          <span class="arrow accent-c text-[18px]">→</span>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <!-- Compare matrix -->
+  <section class="rounded-[16px] bg-stone-900/60 border border-stone-800 p-8 mb-12">
+    <h3 class="text-[20px] font-bold text-stone-100 mb-6">维度对比</h3>
+    <div class="grid grid-cols-4 gap-px bg-stone-800 rounded-[10px] overflow-hidden">
+      <!-- header -->
+      <div class="bg-stone-900 p-4 text-[11px] uppercase tracking-wider text-stone-500 font-semibold">维度</div>
+      <div class="bg-stone-900 p-4 text-[13px] text-stone-200"><span class="display-paper text-stone-100 text-[16px]">A · 纸感</span></div>
+      <div class="bg-stone-900 p-4 text-[13px] text-stone-200"><span class="display-brutalist text-stone-100 text-[16px]">B · 野性</span></div>
+      <div class="bg-stone-900 p-4 text-[13px] text-stone-200"><span class="display-cozy text-stone-100 text-[16px]">C · 温润</span></div>
+
+      <div class="bg-stone-900 p-4 text-[12px] text-stone-400">主字体</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200 display-paper">Fraunces 衬线</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200 mono">JetBrains Mono</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">Manrope · Instrument Serif</div>
+
+      <div class="bg-stone-900 p-4 text-[12px] text-stone-400">圆角哲学</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">柔和统一 10px</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">几乎无 (2px)</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">分级 12/10/999</div>
+
+      <div class="bg-stone-900 p-4 text-[12px] text-stone-400">分层手段</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">纸感色阶（无 border）</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">Hairline 1px 边框</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">柔和投影 + 色阶</div>
+
+      <div class="bg-stone-900 p-4 text-[12px] text-stone-400">强调色</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200 flex items-center gap-2"><span class="swatch" style="background:oklch(0.55 0.16 28)"></span> 旧打字机红</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200 flex items-center gap-2"><span class="swatch" style="background:oklch(0.85 0.24 142)"></span> 酸性青柠</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200 flex items-center gap-2"><span class="swatch" style="background:oklch(0.70 0.135 68)"></span> 琥珀</div>
+
+      <div class="bg-stone-900 p-4 text-[12px] text-stone-400">密度</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">疏朗</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">密集（信息优先）</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">中等</div>
+
+      <div class="bg-stone-900 p-4 text-[12px] text-stone-400">微交互记忆点</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">斜体衬线元数据</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">按下整体偏移 2px</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">Pill 切换 + scale 反馈</div>
+
+      <div class="bg-stone-900 p-4 text-[12px] text-stone-400">适合谁</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">长文写作 / 散文 / 笔记本</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">工程师 / 终端用户 / 极简党</div>
+      <div class="bg-stone-900 p-4 text-[12.5px] text-stone-200">日常笔记 / 通用产品形态</div>
+    </div>
+  </section>
+
+  <section class="rounded-[16px] bg-stone-900/40 border border-stone-800 p-8">
+    <h3 class="text-[18px] font-bold text-stone-100 mb-3">下一步</h3>
+    <p class="text-[14px] text-stone-400 leading-[1.7]">
+      挑一个方向告诉我，比如"走 C，但 chrome 再野一点"，或"A 加上 C 的 pill 切换"。
+      定方向后我把它落到 React + Tailwind v4 token，替换掉现在的 neutral 全栈。
+      不打算落地的方案 HTML 也可以删掉 / 留作未来参考。
+    </p>
+    <div class="mt-6 flex flex-wrap gap-3 text-[12.5px]">
+      <span class="px-3 py-1.5 rounded-md mono text-stone-300" style="background:#1c1f24">docs/mockups/A-paper.html</span>
+      <span class="px-3 py-1.5 rounded-md mono text-stone-300" style="background:#1c1f24">docs/mockups/B-brutalist.html</span>
+      <span class="px-3 py-1.5 rounded-md mono text-stone-300" style="background:#1c1f24">docs/mockups/C-cozy.html</span>
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Quill · 导出/大纲 交互方案</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,30..100,0..1;1,9..144,300..900,30..100,0..1&family=Geist:wght@300..700&family=JetBrains+Mono:wght@400;600&family=Noto+Serif+SC:wght@400..700&family=Noto+Sans+SC:wght@400..600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:        oklch(0.974 0.012 86);
+    --paper-dim:    oklch(0.952 0.014 84);
+    --paper-soft:   oklch(0.928 0.016 80);
+    --paper-edge:   oklch(0.892 0.018 76);
+    --ink:          oklch(0.225 0.018 50);
+    --ink-soft:     oklch(0.420 0.014 50);
+    --ink-faint:    oklch(0.620 0.010 50);
+    --ink-ghost:    oklch(0.780 0.008 50);
+    --rule:         oklch(0.880 0.014 75);
+    --rule-soft:    oklch(0.920 0.012 78);
+    --accent:       oklch(0.55  0.16 28);
+    --accent-soft:  oklch(0.93  0.04 35);
+  }
+  html,body{background:#e7e2d8;color:#3a342c;}
+  body{font-family:'Geist',-apple-system,system-ui,sans-serif;}
+  .font-display{font-family:'Fraunces','Noto Serif SC',serif;font-optical-sizing:auto;font-variation-settings:"SOFT" 50,"WONK" 0;}
+  .font-display-wonk{font-family:'Fraunces','Noto Serif SC',serif;font-optical-sizing:auto;font-variation-settings:"SOFT" 80,"WONK" 1;}
+  .font-serif-zh{font-family:'Noto Serif SC',serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .frame{box-shadow:0 32px 70px -28px rgba(60,40,20,0.32),0 14px 28px -16px rgba(60,40,20,0.22);background:var(--paper);color:var(--ink);}
+  .surface-dim{background:var(--paper-dim);}
+  .surface-soft{background:var(--paper-soft);}
+  .rule-b{border-bottom:1px solid var(--rule);}
+  .rule-r{border-right:1px solid var(--rule);}
+  .rule-l{border-left:1px solid var(--rule);}
+  .ink{color:var(--ink);} .ink-soft{color:var(--ink-soft);} .ink-faint{color:var(--ink-faint);} .ink-ghost{color:var(--ink-ghost);}
+  .accent{color:var(--accent);} .bg-accent{background:var(--accent);}
+  .pill-active{background:var(--ink);color:var(--paper);}
+  .file-active{background:var(--paper-soft);box-shadow:inset 2px 0 0 var(--accent);}
+  .dot-unsaved{background:var(--accent);}
+  .traffic{display:inline-flex;gap:7px;align-items:center;padding-left:14px;}
+  .traffic span{width:11px;height:11px;border-radius:50%;display:block;}
+  .traffic .r{background:#ed6a5e;} .traffic .y{background:#f5bd4f;} .traffic .g{background:#62c554;}
+  .section-label{font-family:'Fraunces',serif;font-style:italic;font-size:13px;color:#7a6f5e;letter-spacing:0.01em;}
+  .annotation{font-family:'Noto Serif SC','Fraunces',serif;}
+  .callout-line{position:absolute;background:var(--accent);}
+  /* annotation cards */
+  .anno-card{background:#fafaf7;border:1px solid #d8d2c3;border-radius:10px;padding:18px 20px;}
+  .anno-num{font-family:'Fraunces',serif;font-style:italic;font-variation-settings:"SOFT" 80,"WONK" 1;font-size:28px;line-height:1;color:var(--accent);}
+
+  /* === edge rail (variant B) === */
+  .edge-rail{position:absolute;top:60px;right:0;bottom:34px;width:14px;display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:6px;pointer-events:none;}
+  .edge-tick{height:1.5px;background:var(--ink-faint);opacity:0.45;}
+  .edge-tick.h1{width:11px;opacity:0.85;background:var(--accent);}
+  .edge-tick.h2{width:8px;}
+  .edge-tick.h3{width:5px;}
+  .edge-tick.current{background:var(--accent);opacity:1;box-shadow:0 0 0 3px var(--accent-soft);}
+
+  .rail-drawer{position:absolute;top:48px;right:14px;width:230px;background:var(--paper);border:1px solid var(--rule);border-radius:10px;box-shadow:0 18px 40px -16px rgba(60,40,20,0.28);padding:8px;}
+  .rail-drawer .header{font-family:'Fraunces',serif;font-style:italic;font-size:12px;color:var(--ink-faint);padding:4px 8px;display:flex;align-items:center;justify-content:space-between;}
+
+  /* === command palette (variant C) === */
+  .palette-overlay{position:absolute;inset:0;background:rgba(40,30,18,0.18);backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;padding-top:120px;}
+  .palette{width:520px;background:var(--paper);border:1px solid var(--rule);border-radius:14px;box-shadow:0 40px 80px -20px rgba(40,30,18,0.4);overflow:hidden;}
+  .palette-input{padding:16px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--rule);}
+  .palette-list{padding:6px;max-height:300px;overflow:auto;}
+  .palette-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;}
+  .palette-row.active{background:var(--paper-soft);box-shadow:inset 2px 0 0 var(--accent);}
+  .palette-section{font-family:'Fraunces',serif;font-style:italic;font-size:11px;color:var(--ink-faint);padding:8px 12px 4px;text-transform:lowercase;letter-spacing:0.05em;}
+
+  /* === overflow menu (variant A) === */
+  .overflow-menu{position:absolute;top:48px;right:14px;width:230px;background:var(--paper);border:1px solid var(--rule);border-radius:10px;box-shadow:0 18px 40px -16px rgba(60,40,20,0.28);padding:6px;z-index:10;}
+  .overflow-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:13px;color:var(--ink);}
+  .overflow-row:hover{background:var(--paper-soft);}
+  .overflow-row .kbd{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-faint);}
+  .overflow-section-label{font-family:'Fraunces',serif;font-style:italic;font-size:11px;color:var(--ink-faint);padding:6px 10px 2px;}
+  .overflow-divider{height:1px;background:var(--rule-soft);margin:4px 6px;}
+</style>
+</head>
+<body>
+
+<header class="max-w-[1400px] mx-auto px-12 pt-16 pb-10">
+  <p class="text-[12px] uppercase tracking-[0.18em] text-stone-500 font-medium">Quill UI · Interactions</p>
+  <h1 class="font-display text-[52px] leading-[1.05] tracking-tight text-stone-900 mt-3" style="font-weight:500">
+    导出 & 大纲 <span class="font-display-wonk italic text-stone-600">· 重新分配权重</span>
+  </h1>
+  <p class="font-serif-zh text-[16px] text-stone-700 leading-[1.75] max-w-[760px] mt-5">
+    问题：现在 Export（罕用）和 Outline（中频）在顶栏并排，跟 ModeSwitcher（高频）权重相等。
+    Outline 用整面板 toggle，太重；Export 大多数时候是干扰。
+    下面三个方案在<strong>"按钮该不该存在"</strong>和<strong>"信息该怎么呈现"</strong>这两条轴上拉开差距。
+  </p>
+</header>
+
+<!-- =================================================================
+     VARIANT A · 轻量整合 (Overflow menu)
+     ================================================================= -->
+<section class="max-w-[1400px] mx-auto px-12 pb-8">
+  <div class="flex items-end justify-between mb-3">
+    <div>
+      <p class="section-label">方案 A</p>
+      <h2 class="font-display text-[30px] mt-0.5 text-stone-900" style="font-weight:500">
+        轻量整合 <span class="font-display-wonk italic text-stone-600">· overflow menu</span>
+      </h2>
+    </div>
+    <div class="flex gap-2">
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">最小改动</span>
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">行业常规</span>
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">未来可扩展</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-[1fr_360px] gap-6 items-start">
+    <!-- mock -->
+    <div class="frame rounded-[12px] overflow-hidden relative" style="height:520px;">
+      <!-- title bar -->
+      <div class="h-9 surface-dim rule-b flex items-center px-3">
+        <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="flex-1 text-center font-display italic text-[13px] ink-faint">quill · docs</div>
+      </div>
+      <!-- pane header -->
+      <div class="h-12 rule-b flex items-center px-6 relative">
+        <span class="font-display italic text-[14px] ink-faint">docs /</span>
+        <span class="font-display text-[15px] ink ml-2">ui-design.md</span>
+        <span class="dot-unsaved w-1.5 h-1.5 rounded-full ml-2"></span>
+
+        <div class="ml-auto flex items-center gap-2">
+          <!-- Outline icon kept -->
+          <button class="w-8 h-8 rounded-md surface-soft ink flex items-center justify-center" title="大纲" style="background:var(--paper-soft)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+          <!-- ModeSwitcher -->
+          <div class="flex items-center gap-0.5 p-0.5 rounded-full surface-soft">
+            <button class="px-3 py-1 rounded-full text-[12px] ink-soft">编辑</button>
+            <button class="px-3 py-1 rounded-full text-[12px] pill-active font-medium">分栏</button>
+            <button class="px-3 py-1 rounded-full text-[12px] ink-soft">预览</button>
+          </div>
+          <!-- Kebab menu opened -->
+          <button class="w-8 h-8 rounded-md flex items-center justify-center ink-faint" style="background:var(--paper-soft)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+        </div>
+
+        <!-- the opened dropdown -->
+        <div class="overflow-menu">
+          <div class="overflow-section-label">导出</div>
+          <div class="overflow-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            <span>导出为 PDF…</span>
+            <span class="kbd">⌘⇧E</span>
+          </div>
+          <div class="overflow-row ink-soft">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>导出为 HTML</span>
+          </div>
+          <div class="overflow-divider"></div>
+          <div class="overflow-section-label">文件</div>
+          <div class="overflow-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>在 Finder 中显示</span>
+          </div>
+          <div class="overflow-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+            <span>复制文件路径</span>
+            <span class="kbd">⌘⇧C</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- body (faded) -->
+      <div class="px-10 pt-10 pb-6 opacity-40 pointer-events-none">
+        <div class="font-display text-[28px] ink mb-3" style="font-weight:500">Quill UI 重构笔记</div>
+        <div class="font-serif-zh italic text-[14px] ink-soft mb-4">2026-05-21 · 周四</div>
+        <p class="font-serif-zh text-[14px] ink-soft leading-[1.85]">今天和 Claude 一起把整个 UI 风格重新梳理了一遍...</p>
+      </div>
+    </div>
+
+    <!-- annotation -->
+    <div class="anno-card">
+      <div class="anno-num">A</div>
+      <h3 class="font-display text-[18px] mt-3 mb-2 ink" style="font-weight:500">轻量整合</h3>
+      <p class="annotation text-[13.5px] ink-soft leading-[1.75]">
+        把 Export 收进右上角 <span class="mono text-[12px] surface-soft px-1.5 py-0.5 rounded">⋯</span>
+        菜单，Outline 保持原按钮。一个 menu 容纳所有低频文件操作（导出/复制路径/在 Finder 中显示…），
+        未来加任何"动作"都进这里，不再污染顶栏。
+      </p>
+      <ul class="mt-4 space-y-2 text-[13px] ink-soft annotation">
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 改动最小，符合习惯（VSCode/Notion 都这套）</li>
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 扩展性强：未来打印/分享/复制路径全进这里</li>
+        <li class="flex gap-2"><span class="ink-faint shrink-0">−</span> Outline 还是显式按钮，并没真正"减负"</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================
+     VARIANT B · 边缘细线 (Margin rail)
+     ================================================================= -->
+<section class="max-w-[1400px] mx-auto px-12 pb-8 mt-8">
+  <div class="flex items-end justify-between mb-3">
+    <div>
+      <p class="section-label">方案 B</p>
+      <h2 class="font-display text-[30px] mt-0.5 text-stone-900" style="font-weight:500">
+        边缘细线 <span class="font-display-wonk italic text-stone-600">· margin rail</span>
+      </h2>
+    </div>
+    <div class="flex gap-2">
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">最 Paper</span>
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">Outline 变 marginalia</span>
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">需要 scroll 追踪</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-[1fr_360px] gap-6 items-start">
+    <div class="frame rounded-[12px] overflow-hidden relative" style="height:520px;">
+      <div class="h-9 surface-dim rule-b flex items-center px-3">
+        <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="flex-1 text-center font-display italic text-[13px] ink-faint">quill · docs</div>
+      </div>
+      <div class="h-12 rule-b flex items-center px-6">
+        <span class="font-display italic text-[14px] ink-faint">docs /</span>
+        <span class="font-display text-[15px] ink ml-2">ui-design.md</span>
+        <span class="dot-unsaved w-1.5 h-1.5 rounded-full ml-2"></span>
+
+        <div class="ml-auto flex items-center gap-2">
+          <!-- Only ModeSwitcher in toolbar -->
+          <div class="flex items-center gap-0.5 p-0.5 rounded-full surface-soft">
+            <button class="px-3 py-1 rounded-full text-[12px] ink-soft">编辑</button>
+            <button class="px-3 py-1 rounded-full text-[12px] pill-active font-medium">分栏</button>
+            <button class="px-3 py-1 rounded-full text-[12px] ink-soft">预览</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- body -->
+      <div class="px-10 pt-10 pb-6 relative" style="height:calc(100% - 36px - 48px - 32px);">
+        <div class="opacity-50">
+          <div class="font-display text-[28px] ink mb-3" style="font-weight:500">Quill UI 重构笔记</div>
+          <div class="font-serif-zh italic text-[13px] ink-soft mb-4">2026-05-21 · 周四</div>
+          <p class="font-serif-zh text-[13.5px] ink-soft leading-[1.85]">今天和 Claude 一起把整个 UI 风格重新梳理了一遍。之前那套全 neutral 色 + Inter 的组合...</p>
+          <div class="font-display text-[20px] ink mt-5 mb-2" style="font-weight:500">三个方向</div>
+          <p class="font-serif-zh text-[13.5px] ink-soft leading-[1.85]">1. 纸感编辑器 — 暖白底 + 衬线大标题</p>
+          <p class="font-serif-zh text-[13.5px] ink-soft leading-[1.85]">2. 极简野性 — 锐角 + 等宽 + 高对比</p>
+          <p class="font-serif-zh text-[13.5px] ink-soft leading-[1.85]">3. 现代温润 — 中等圆角 + 暖灰</p>
+          <div class="font-display text-[20px] ink mt-5 mb-2" style="font-weight:500">待办</div>
+        </div>
+
+        <!-- edge rail -->
+        <div class="edge-rail">
+          <div class="edge-tick h1"></div>
+          <div class="edge-tick h2 current"></div>
+          <div class="edge-tick h3"></div>
+          <div class="edge-tick h3"></div>
+          <div class="edge-tick h3"></div>
+          <div class="edge-tick h2"></div>
+          <div class="edge-tick h3"></div>
+        </div>
+
+        <!-- expanded drawer (hovered) -->
+        <div class="rail-drawer">
+          <div class="header">
+            <span>大纲</span>
+            <span class="mono text-[10px] ink-faint">⌘⇧L</span>
+          </div>
+          <div class="px-1">
+            <div class="px-2 py-1 rounded text-[12.5px] ink-soft">Quill UI 重构笔记</div>
+            <div class="px-2 py-1 rounded text-[12.5px] surface-soft ink font-medium" style="box-shadow:inset 2px 0 0 var(--accent)">　三个方向</div>
+            <div class="px-2 py-1 rounded text-[12.5px] ink-soft">　　纸感编辑器</div>
+            <div class="px-2 py-1 rounded text-[12.5px] ink-soft">　　极简野性</div>
+            <div class="px-2 py-1 rounded text-[12.5px] ink-soft">　　现代温润</div>
+            <div class="px-2 py-1 rounded text-[12.5px] ink-soft">　待办</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- status bar with export tucked in -->
+      <div class="h-8 surface-dim rule-b flex items-center px-4 text-[11px] ink-faint absolute bottom-0 left-0 right-0" style="border-top:1px solid var(--rule);border-bottom:0;">
+        <span>1,234 字</span>
+        <span class="mx-3 ink-ghost">·</span>
+        <span class="accent flex items-center gap-1.5"><span class="dot-unsaved w-1.5 h-1.5 rounded-full"></span>未保存</span>
+        <span class="ml-auto flex items-center gap-3">
+          <button class="flex items-center gap-1 px-2 py-0.5 rounded hover:bg-[var(--paper-soft)] ink-faint" title="导出 ⌘⇧E">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            <span>导出</span>
+          </button>
+          <span class="font-display italic">Light</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="anno-card">
+      <div class="anno-num">B</div>
+      <h3 class="font-display text-[18px] mt-3 mb-2 ink" style="font-weight:500">边缘细线</h3>
+      <p class="annotation text-[13.5px] ink-soft leading-[1.75]">
+        把大纲变成<strong>右边一条细脊柱</strong>：每个标题一道短横，长度对应 h1/h2/h3；
+        当前阅读位置一道亮 accent + 光晕。鼠标移到这条边缘时整张大纲卡片浮出来。
+        Export 完全离开顶栏，塞进状态栏右下角，跟主题切换并列。
+      </p>
+      <ul class="mt-4 space-y-2 text-[13px] ink-soft annotation">
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 顶栏完全干净：只剩 ModeSwitcher</li>
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 大纲从"开关一个面板"变成"边角余光"</li>
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 跟随阅读位置，是<em>marginalia</em>而不是 nav</li>
+        <li class="flex gap-2"><span class="ink-faint shrink-0">−</span> 工程量最大：需要监听滚动 + 计算当前 heading</li>
+        <li class="flex gap-2"><span class="ink-faint shrink-0">−</span> 第一次见的人需要 hover 才发现</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================
+     VARIANT C · 命令面板 (Command palette)
+     ================================================================= -->
+<section class="max-w-[1400px] mx-auto px-12 pb-16 mt-8">
+  <div class="flex items-end justify-between mb-3">
+    <div>
+      <p class="section-label">方案 C</p>
+      <h2 class="font-display text-[30px] mt-0.5 text-stone-900" style="font-weight:500">
+        命令面板 <span class="font-display-wonk italic text-stone-600">· ⌘K palette</span>
+      </h2>
+    </div>
+    <div class="flex gap-2">
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">最现代</span>
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">总入口</span>
+      <span class="px-2.5 py-1 rounded-full bg-stone-200/80 text-[12px] text-stone-700">需新建系统</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-[1fr_360px] gap-6 items-start">
+    <div class="frame rounded-[12px] overflow-hidden relative" style="height:520px;">
+      <div class="h-9 surface-dim rule-b flex items-center px-3">
+        <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="flex-1 text-center font-display italic text-[13px] ink-faint">quill · docs</div>
+      </div>
+      <div class="h-12 rule-b flex items-center px-6">
+        <span class="font-display italic text-[14px] ink-faint">docs /</span>
+        <span class="font-display text-[15px] ink ml-2">ui-design.md</span>
+        <span class="dot-unsaved w-1.5 h-1.5 rounded-full ml-2"></span>
+
+        <div class="ml-auto flex items-center gap-2">
+          <!-- subtle ⌘K hint pill -->
+          <button class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] surface-soft ink-faint hover:ink">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span class="font-serif-zh italic">搜索 / 命令</span>
+            <span class="mono ink-faint" style="font-size:10.5px">⌘K</span>
+          </button>
+          <div class="flex items-center gap-0.5 p-0.5 rounded-full surface-soft">
+            <button class="px-3 py-1 rounded-full text-[12px] ink-soft">编辑</button>
+            <button class="px-3 py-1 rounded-full text-[12px] pill-active font-medium">分栏</button>
+            <button class="px-3 py-1 rounded-full text-[12px] ink-soft">预览</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- body faded behind palette -->
+      <div class="px-10 pt-10 pb-6 opacity-25 pointer-events-none">
+        <div class="font-display text-[28px] ink mb-3" style="font-weight:500">Quill UI 重构笔记</div>
+        <p class="font-serif-zh text-[13.5px] ink-soft leading-[1.85]">今天和 Claude 一起把整个 UI 风格重新梳理了一遍...</p>
+      </div>
+
+      <!-- palette overlay -->
+      <div class="palette-overlay">
+        <div class="palette">
+          <div class="palette-input">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" value="导" class="flex-1 bg-transparent text-[15px] ink outline-none" />
+            <span class="font-serif-zh italic text-[11px] ink-faint">↑↓ 选择 · ↵ 执行 · esc 关</span>
+          </div>
+          <div class="palette-list">
+            <div class="palette-section">命令</div>
+            <div class="palette-row active">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              <span class="ink text-[13.5px]">导出为 PDF…</span>
+              <span class="ml-auto mono text-[11px] ink-faint">⌘⇧E</span>
+            </div>
+            <div class="palette-row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              <span class="ink text-[13.5px]">显示大纲</span>
+              <span class="ml-auto mono text-[11px] ink-faint">⌘⇧L</span>
+            </div>
+            <div class="palette-row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ink-faint"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m11-11h-6m-6 0H1m15.5-7.5l-4.2 4.2m-3.6 3.6L4.5 19.5m0-15l4.2 4.2m3.6 3.6l4.2 4.2"/></svg>
+              <span class="ink text-[13.5px]">切换主题（深色 / 浅色 / 跟随）</span>
+            </div>
+            <div class="palette-section">跳到标题</div>
+            <div class="palette-row">
+              <span class="font-display italic accent text-[11px]">#</span>
+              <span class="ink text-[13.5px]">Quill UI 重构笔记</span>
+            </div>
+            <div class="palette-row">
+              <span class="font-display italic accent text-[11px]">##</span>
+              <span class="ink text-[13.5px]">三个方向</span>
+            </div>
+            <div class="palette-row">
+              <span class="font-display italic accent text-[11px]">##</span>
+              <span class="ink text-[13.5px]">待办</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="anno-card">
+      <div class="anno-num">C</div>
+      <h3 class="font-display text-[18px] mt-3 mb-2 ink" style="font-weight:500">命令面板</h3>
+      <p class="annotation text-[13.5px] ink-soft leading-[1.75]">
+        加一个 <span class="mono text-[12px] surface-soft px-1.5 py-0.5 rounded">⌘K</span>
+        命令面板做所有动作的总入口。Toolbar 只剩 ModeSwitcher 和一颗
+        <span class="font-serif-zh italic">"搜索 / 命令"</span> pill。Outline 仍然存在，
+        但通过 <span class="mono text-[12px]">⌘⇧L</span> 或 ⌘K 中"显示大纲"调出。
+        额外彩蛋：palette 里还能<strong>直接跳到任何 heading</strong>。
+      </p>
+      <ul class="mt-4 space-y-2 text-[13px] ink-soft annotation">
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 顶栏最干净；扩展无上限</li>
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 同时解决"跳到 heading"和"搜文件"的入口</li>
+        <li class="flex gap-2"><span class="accent shrink-0">+</span> 跟其他现代工具一致（Linear/Raycast/...）</li>
+        <li class="flex gap-2"><span class="ink-faint shrink-0">−</span> 需要新建 command registry 系统</li>
+        <li class="flex gap-2"><span class="ink-faint shrink-0">−</span> 鼠标流用户每次都要走两步</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- compare matrix -->
+<section class="max-w-[1400px] mx-auto px-12 pb-20">
+  <div class="rounded-[14px] p-7" style="background:#1f1c17;color:#e8e2d3">
+    <h3 class="font-display text-[22px] mb-6" style="font-weight:500">三方案侧比</h3>
+    <div class="grid grid-cols-4 gap-px rounded-[10px] overflow-hidden" style="background:#3a342c;">
+      <div class="p-4 text-[11px] uppercase tracking-wider opacity-60" style="background:#1f1c17">维度</div>
+      <div class="p-4 text-[13px]" style="background:#1f1c17"><span class="font-display text-[16px]">A · 轻量整合</span></div>
+      <div class="p-4 text-[13px]" style="background:#1f1c17"><span class="font-display text-[16px]">B · 边缘细线</span></div>
+      <div class="p-4 text-[13px]" style="background:#1f1c17"><span class="font-display text-[16px]">C · 命令面板</span></div>
+
+      <div class="p-4 text-[12px] opacity-60" style="background:#1f1c17">Toolbar 按钮</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">Outline + ⋯ + Mode</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">只剩 Mode</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">⌘K pill + Mode</div>
+
+      <div class="p-4 text-[12px] opacity-60" style="background:#1f1c17">Export 入口</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">⋯ 菜单（+File 原生菜单）</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">状态栏 ⤓ 图标</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">⌘K → "导出"</div>
+
+      <div class="p-4 text-[12px] opacity-60" style="background:#1f1c17">Outline 形态</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">右侧独立面板（同当前）</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">右边脊柱 + hover 卡片</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">⌘K + ⌘⇧L 调出面板</div>
+
+      <div class="p-4 text-[12px] opacity-60" style="background:#1f1c17">改动工程量</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17"><span class="accent">★</span> 小</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17"><span class="accent">★★★</span> 中（需要 scroll 追踪）</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17"><span class="accent">★★</span> 中（需要 command registry）</div>
+
+      <div class="p-4 text-[12px] opacity-60" style="background:#1f1c17">"Paper 味"</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">中</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">★★★ 最强</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">中</div>
+
+      <div class="p-4 text-[12px] opacity-60" style="background:#1f1c17">未来扩展</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">★★ 加项填进菜单</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">★ 只能容纳少量动作</div>
+      <div class="p-4 text-[12.5px]" style="background:#1f1c17">★★★ 任意 command 都进 ⌘K</div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

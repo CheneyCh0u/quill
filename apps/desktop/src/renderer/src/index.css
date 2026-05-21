@@ -3,56 +3,98 @@
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* ============================================================
+ * Paper · 纸感编辑器 — 色彩 / 字体 token
+ * 暖白纸底 + 衬线大标题 + 旧打字机红强调。chrome 不靠 border
+ * 也不靠 shadow 分层，靠几档纸感色阶推进。
+ * ============================================================ */
+
 :root {
   color-scheme: light;
 
-  /* Code block surface */
-  --code-bg: #f6f8fa;
-  --code-border: #d0d7de;
-  --code-fg: #1f2328;
+  /* Paper surface stack (background steps) */
+  --paper:        oklch(0.974 0.012 86);
+  --paper-dim:    oklch(0.952 0.014 84);
+  --paper-soft:   oklch(0.928 0.016 80);
+  --paper-edge:   oklch(0.892 0.018 76);
 
-  /* highlight.js tokens — GitHub Light */
-  --hl-comment: #6e7781;
-  --hl-keyword: #cf222e;
-  --hl-string: #0a3069;
-  --hl-number: #0550ae;
-  --hl-builtin: #8250df;
-  --hl-function: #8250df;
-  --hl-variable: #953800;
-  --hl-type: #953800;
-  --hl-meta: #6e7781;
-  --hl-tag: #116329;
-  --hl-symbol: #0550ae;
-  --hl-attr: #0550ae;
-  --hl-deletion-bg: #ffebe9;
-  --hl-deletion-fg: #82071e;
-  --hl-addition-bg: #dafbe1;
-  --hl-addition-fg: #116329;
+  /* Ink scale (foreground) */
+  --ink:          oklch(0.225 0.018 50);
+  --ink-soft:     oklch(0.420 0.014 50);
+  --ink-faint:    oklch(0.620 0.010 50);
+  --ink-ghost:    oklch(0.780 0.008 50);
+
+  /* Hairlines */
+  --rule:         oklch(0.880 0.014 75);
+  --rule-soft:    oklch(0.920 0.012 78);
+
+  /* Accent — 旧打字机色带的红 */
+  --accent:       oklch(0.55  0.16 28);
+  --accent-soft:  oklch(0.930 0.04 35);
+
+  /* Code block surface */
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+
+  /* highlight.js — paper-warm GitHub Light variant */
+  --hl-comment:   #8a7e6b;
+  --hl-keyword:   #b53d2e;
+  --hl-string:    #5a6f3a;
+  --hl-number:    #8a5a18;
+  --hl-builtin:   #7a4ea8;
+  --hl-function:  #7a4ea8;
+  --hl-variable:  #8a5018;
+  --hl-type:      #8a5018;
+  --hl-meta:      #8a7e6b;
+  --hl-tag:       #4a6a2a;
+  --hl-symbol:    #1f5180;
+  --hl-attr:      #1f5180;
+  --hl-deletion-bg: #f3dcd7;
+  --hl-deletion-fg: #7a1d10;
+  --hl-addition-bg: #dde9c8;
+  --hl-addition-fg: #2a4a18;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --code-bg: #161b22;
-  --code-border: #30363d;
-  --code-fg: #e6edf3;
+  --paper:        oklch(0.178 0.012 248);
+  --paper-dim:    oklch(0.206 0.012 248);
+  --paper-soft:   oklch(0.238 0.014 250);
+  --paper-edge:   oklch(0.282 0.015 250);
 
-  --hl-comment: #8b949e;
-  --hl-keyword: #ff7b72;
-  --hl-string: #a5d6ff;
-  --hl-number: #79c0ff;
-  --hl-builtin: #d2a8ff;
-  --hl-function: #d2a8ff;
-  --hl-variable: #ffa657;
-  --hl-type: #ffa657;
-  --hl-meta: #8b949e;
-  --hl-tag: #7ee787;
-  --hl-symbol: #79c0ff;
-  --hl-attr: #79c0ff;
-  --hl-deletion-bg: #67060c;
-  --hl-deletion-fg: #ffdcd7;
-  --hl-addition-bg: #033a16;
-  --hl-addition-fg: #aff5b4;
+  --ink:          oklch(0.924 0.008 80);
+  --ink-soft:     oklch(0.740 0.008 80);
+  --ink-faint:    oklch(0.540 0.008 80);
+  --ink-ghost:    oklch(0.400 0.008 80);
+
+  --rule:         oklch(0.300 0.012 248);
+  --rule-soft:    oklch(0.260 0.012 248);
+
+  --accent:       oklch(0.78  0.14 40);
+  --accent-soft:  oklch(0.300 0.08 35);
+
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+
+  --hl-comment:   #8a8378;
+  --hl-keyword:   #e87b6c;
+  --hl-string:    #c8cf9a;
+  --hl-number:    #e8b06e;
+  --hl-builtin:   #c4a8e0;
+  --hl-function:  #c4a8e0;
+  --hl-variable:  #e8b06e;
+  --hl-type:      #e8b06e;
+  --hl-meta:      #8a8378;
+  --hl-tag:       #a8c884;
+  --hl-symbol:    #8ac4e8;
+  --hl-attr:      #8ac4e8;
+  --hl-deletion-bg: #4a1c14;
+  --hl-deletion-fg: #ffd5cd;
+  --hl-addition-bg: #1f3818;
+  --hl-addition-fg: #c5e4b2;
 }
 
 html,
@@ -63,17 +105,44 @@ body,
 }
 
 body {
+  background: var(--paper);
+  color: var(--ink);
   font-family:
+    "Geist",
+    "Noto Sans SC",
     -apple-system,
     BlinkMacSystemFont,
-    "Inter",
     "Segoe UI",
     system-ui,
     sans-serif;
-  font-feature-settings: "cv11";
+  font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+/* ============================================================
+ * Display utilities — Fraunces 衬线大标题
+ * ============================================================ */
+
+.font-display {
+  font-family: "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 50, "WONK" 0;
+}
+
+.font-display-wonk {
+  font-family: "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 80, "WONK" 1;
+}
+
+.font-serif-zh {
+  font-family: "Noto Serif SC", "Fraunces", Georgia, serif;
+}
+
+/* ============================================================
+ * CodeMirror — paper-tinted active line + 搜索高亮
+ * ============================================================ */
 
 .cm-editor {
   height: 100%;
@@ -94,21 +163,14 @@ body {
   font-family: inherit;
 }
 
-/* Tone down the active-line highlight so it doesn't compete with search hits */
 .cm-editor .cm-activeLine {
-  background-color: rgba(0, 0, 0, 0.025) !important;
+  background-color: color-mix(in oklch, var(--ink) 3%, transparent) !important;
 }
 .cm-editor .cm-activeLineGutter {
-  background-color: rgba(0, 0, 0, 0.04) !important;
-}
-[data-theme="dark"] .cm-editor .cm-activeLine {
-  background-color: rgba(255, 255, 255, 0.03) !important;
-}
-[data-theme="dark"] .cm-editor .cm-activeLineGutter {
-  background-color: rgba(255, 255, 255, 0.04) !important;
+  background-color: color-mix(in oklch, var(--ink) 5%, transparent) !important;
 }
 
-/* Search highlights: yellow for all matches, orange for the current one */
+/* Search highlights — 沿用旧的黄/橙逻辑，但在暗色下降饱和 */
 .cm-editor .cm-searchMatch {
   background-color: rgba(255, 213, 0, 0.42) !important;
   border-radius: 2px;
@@ -132,29 +194,242 @@ body {
 }
 
 /* ============================================================
- * Markdown preview — code blocks
+ * Markdown preview — Paper prose
+ * 用 .prose-paper（在 Preview.tsx 套上）替代 Tailwind 默认的
+ * prose-neutral。所有字色 / 字体 / 间距走 paper token。
  * ============================================================ */
 
-.prose pre.hljs,
-.prose pre {
+.prose-paper {
+  color: var(--ink);
+  font-family: "Geist", "Noto Sans SC", -apple-system, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.75;
+  max-width: 64ch;
+}
+
+.prose-paper h1 {
+  font-family: "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 80, "WONK" 1;
+  font-size: 2.1rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0 0 1rem;
+  color: var(--ink);
+}
+
+.prose-paper h2 {
+  font-family: "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-optical-sizing: auto;
+  font-size: 1.4rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin: 1.8rem 0 0.7rem;
+  color: var(--ink);
+}
+
+.prose-paper h3 {
+  font-family: "Fraunces", "Noto Serif SC", Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 1.4rem 0 0.5rem;
+  color: var(--ink);
+}
+
+.prose-paper h4,
+.prose-paper h5,
+.prose-paper h6 {
+  font-family: "Geist", "Noto Sans SC", sans-serif;
+  font-weight: 600;
+  margin: 1.2rem 0 0.4rem;
+  color: var(--ink);
+}
+
+.prose-paper p {
+  font-family: "Noto Serif SC", "Fraunces", Georgia, serif;
+  font-size: 0.95rem;
+  line-height: 1.85;
+  margin: 0 0 0.95rem;
+  color: var(--ink-soft);
+}
+
+.prose-paper strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.prose-paper em {
+  font-style: italic;
+  color: var(--ink);
+}
+
+.prose-paper a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in oklch, var(--accent) 50%, transparent);
+}
+
+.prose-paper a:hover {
+  text-decoration-color: var(--accent);
+}
+
+.prose-paper blockquote {
+  font-family: "Fraunces", "Noto Serif SC", serif;
+  font-style: italic;
+  font-size: 0.95rem;
+  border-left: 2px solid var(--accent);
+  padding: 0.1rem 0 0.1rem 0.9rem;
+  color: var(--ink-soft);
+  margin: 0 0 1rem;
+}
+
+.prose-paper blockquote p {
+  font-family: inherit;
+  font-style: inherit;
+  margin: 0;
+  color: inherit;
+}
+
+.prose-paper ul,
+.prose-paper ol {
+  margin: 0 0 1rem;
+  padding-left: 1.4rem;
+}
+
+.prose-paper ul {
+  list-style: none;
+  padding-left: 1.1rem;
+}
+
+.prose-paper ul > li {
+  font-family: "Noto Serif SC", "Fraunces", serif;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+  position: relative;
+}
+
+.prose-paper ul > li::before {
+  content: "·";
+  position: absolute;
+  left: -0.9rem;
+  top: 0.1rem;
+  color: var(--accent);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.prose-paper ol {
+  list-style: decimal;
+}
+
+.prose-paper ol > li {
+  font-family: "Noto Serif SC", "Fraunces", serif;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+  padding-left: 0.25rem;
+}
+
+.prose-paper ol > li::marker {
+  color: var(--accent);
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Task list items — markdown-it renders them as <li> with leading checkbox */
+.prose-paper li input[type="checkbox"] {
+  appearance: none;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1.5px solid var(--ink-faint);
+  border-radius: 3px;
+  margin: 0 0.4rem 0 -1.5rem;
+  vertical-align: -2px;
+  cursor: default;
+}
+
+.prose-paper li input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.prose-paper li input[type="checkbox"]:checked + * {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-ghost);
+}
+
+.prose-paper hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2rem 0;
+}
+
+.prose-paper table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1rem;
+  font-family: "Geist", "Noto Sans SC", sans-serif;
+  font-size: 0.9rem;
+}
+
+.prose-paper th,
+.prose-paper td {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--rule);
+  text-align: left;
+}
+
+.prose-paper th {
+  background: var(--paper-dim);
+  color: var(--ink);
+  font-weight: 600;
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.prose-paper img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 1rem 0;
+}
+
+/* Inline code */
+.prose-paper :not(pre) > code {
+  background-color: var(--paper-soft);
+  color: var(--ink);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.86em;
+  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Code blocks */
+.prose-paper pre.hljs,
+.prose-paper pre {
   background-color: var(--code-bg) !important;
   color: var(--code-fg) !important;
   border: 1px solid var(--code-border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 12px 14px;
   overflow-x: auto;
-  font-family:
-    "JetBrains Mono",
-    "SF Mono",
-    Menlo,
-    Consolas,
-    monospace;
+  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   font-size: 13px;
-  line-height: 1.55;
+  line-height: 1.6;
+  margin: 0 0 1rem;
 }
 
-.prose pre code,
-.prose pre.hljs code {
+.prose-paper pre code,
+.prose-paper pre.hljs code {
   background: transparent !important;
   color: inherit !important;
   padding: 0;
@@ -163,21 +438,13 @@ body {
 }
 
 /* Strip prose's default `` quote marks around inline code */
-.prose :where(code):not(:where([class~="hljs"] *))::before,
-.prose :where(code):not(:where([class~="hljs"] *))::after {
+.prose-paper :where(code):not(:where([class~="hljs"] *))::before,
+.prose-paper :where(code):not(:where([class~="hljs"] *))::after {
   content: "" !important;
 }
 
-.prose :not(pre) > code {
-  background-color: var(--code-bg);
-  color: var(--code-fg);
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-  font-size: 0.88em;
-}
-
 /* ============================================================
- * highlight.js token theme (GitHub Light / Dark via vars)
+ * highlight.js token theme — paper-warm
  * ============================================================ */
 
 .hljs-comment,

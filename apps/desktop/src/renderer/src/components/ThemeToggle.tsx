@@ -10,10 +10,10 @@ export function ThemeToggle() {
     <button
       onClick={cyclePref}
       title={`主题：${label}（点击切换）`}
-      className="no-drag flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-neutral-200/70 dark:hover:bg-neutral-800 text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+      className="no-drag flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-[var(--paper-soft)] text-[var(--ink-faint)] hover:text-[var(--ink)] transition"
     >
       <Icon className="w-3 h-3" />
-      <span className="text-[11px]">{label}</span>
+      <span className="font-serif-zh italic text-[11px]">{label}</span>
     </button>
   )
 }

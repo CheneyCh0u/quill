@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronUp, ChevronDown, X, CaseSensitive, Regex } from 'lucide-react'
+import { ChevronUp, ChevronDown, X, CaseSensitive, Regex, Search, Replace } from 'lucide-react'
 import type { EditorView } from '@codemirror/view'
 import {
   SearchQuery,
@@ -65,6 +65,7 @@ export function SearchPanel({ view, mode, initialQuery, onClose, onSwitchMode }:
   const [regex, setRegex] = useState(false)
   const [matchInfo, setMatchInfo] = useState<MatchInfo>({ current: 0, total: 0 })
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const replaceInputRef = useRef<HTMLInputElement | null>(null)
 
   // Push the current query into the editor whenever something changes.
   useEffect(() => {
@@ -115,6 +116,9 @@ export function SearchPanel({ view, mode, initialQuery, onClose, onSwitchMode }:
     } else if (e.key === 'Escape') {
       e.preventDefault()
       close()
+    } else if (e.key === 'Tab' && mode === 'replace') {
+      e.preventDefault()
+      replaceInputRef.current?.focus()
     }
   }
 
@@ -126,10 +130,14 @@ export function SearchPanel({ view, mode, initialQuery, onClose, onSwitchMode }:
     } else if (e.key === 'Escape') {
       e.preventDefault()
       close()
+    } else if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault()
+      searchInputRef.current?.focus()
     }
   }
 
   const hasQuery = query.length > 0
+  const noMatches = hasQuery && matchInfo.total === 0
   const countLabel = !hasQuery
     ? null
     : matchInfo.total === 0
@@ -139,34 +147,31 @@ export function SearchPanel({ view, mode, initialQuery, onClose, onSwitchMode }:
         : `${matchInfo.current} / ${matchInfo.total}`
 
   const fieldCls =
-    'flex-1 min-w-0 px-2 py-1 text-sm bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:border-neutral-500 dark:focus:border-neutral-500 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400'
+    'flex-1 min-w-0 px-2 py-1 text-[13px] bg-[var(--paper-soft)] border border-transparent rounded-md focus:outline-none focus:border-[var(--accent)]/40 focus:bg-[var(--paper)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] placeholder:italic placeholder:font-["Fraunces"]'
   const iconBtnCls =
-    'no-drag p-1 rounded text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-default'
+    'no-drag p-1 rounded-md text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40 disabled:cursor-default'
   const toggleCls = (on: boolean): string =>
-    `${iconBtnCls} ${on ? '!bg-neutral-200 !text-neutral-900 dark:!bg-neutral-700 dark:!text-neutral-50' : ''}`
-  const labelBtnCls =
-    'no-drag px-2 py-1 text-xs rounded border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-default'
-
-  const noMatches = hasQuery && matchInfo.total === 0
+    `${iconBtnCls} ${on ? '!bg-[var(--paper-soft)] !text-[var(--accent)]' : ''}`
 
   return (
-    <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/80 px-2 py-1.5 flex flex-col gap-1.5">
+    <div className="no-drag shrink-0 border-b border-[var(--rule)] bg-[var(--paper-dim)] px-3 py-2 flex flex-col gap-1.5">
       <div className="flex items-center gap-1.5">
+        <Search className="w-3.5 h-3.5 text-[var(--ink-faint)] shrink-0" />
         <input
           ref={searchInputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onFindKey}
-          placeholder="查找"
+          placeholder="查找…"
           className={fieldCls}
         />
         {countLabel !== null && (
           <span
-            className={`text-[11px] tabular-nums px-1.5 select-none shrink-0 ${noMatches ? 'text-red-500 dark:text-red-400' : 'text-neutral-500 dark:text-neutral-400'}`}
+            className={`font-serif-zh italic text-[11.5px] tabular-nums px-1 select-none shrink-0 ${
+              noMatches ? 'text-[var(--accent)]' : 'text-[var(--ink-faint)]'
+            }`}
             title={
-              matchInfo.total > 0 && matchInfo.current === 0
-                ? '回车跳到第一个'
-                : undefined
+              matchInfo.total > 0 && matchInfo.current === 0 ? '回车跳到第一个' : undefined
             }
           >
             {countLabel}
@@ -186,6 +191,7 @@ export function SearchPanel({ view, mode, initialQuery, onClose, onSwitchMode }:
         >
           <Regex className="w-3.5 h-3.5" />
         </button>
+        <div className="w-px h-4 bg-[var(--rule)] mx-0.5" />
         <button
           onClick={() => findPrevious(view)}
           disabled={!hasQuery || matchInfo.total === 0}
@@ -202,40 +208,37 @@ export function SearchPanel({ view, mode, initialQuery, onClose, onSwitchMode }:
         >
           <ChevronDown className="w-3.5 h-3.5" />
         </button>
-        {mode === 'find' ? (
-          <button
-            onClick={() => onSwitchMode('replace')}
-            className={labelBtnCls}
-            title="切换到替换 (⌘R)"
-          >
-            替换…
-          </button>
-        ) : (
-          <button
-            onClick={() => onSwitchMode('find')}
-            className={labelBtnCls}
-            title="仅查找 (⌘F)"
-          >
-            仅查找
-          </button>
-        )}
-        <button onClick={close} title="关闭 (Esc)" className={iconBtnCls}>
+        <div className="w-px h-4 bg-[var(--rule)] mx-0.5" />
+        <button
+          onClick={() => onSwitchMode(mode === 'find' ? 'replace' : 'find')}
+          title={mode === 'find' ? '切换到替换 (⌘R)' : '仅查找 (⌘F)'}
+          className={`${iconBtnCls} ${mode === 'replace' ? '!bg-[var(--paper-soft)] !text-[var(--accent)]' : ''}`}
+        >
+          <Replace className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={close}
+          title="关闭 (Esc)"
+          className={iconBtnCls}
+        >
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
+
       {mode === 'replace' && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 pl-[20px]">
           <input
+            ref={replaceInputRef}
             value={replacement}
             onChange={(e) => setReplacement(e.target.value)}
             onKeyDown={onReplaceKey}
-            placeholder="替换为"
+            placeholder="替换为…"
             className={fieldCls}
           />
           <button
             onClick={() => replaceNext(view)}
             disabled={!hasQuery || matchInfo.total === 0}
-            className={labelBtnCls}
+            className="no-drag px-2.5 py-1 text-[12px] rounded-md text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40 disabled:cursor-default"
             title="替换并跳到下一个 (↵)"
           >
             替换
@@ -243,10 +246,10 @@ export function SearchPanel({ view, mode, initialQuery, onClose, onSwitchMode }:
           <button
             onClick={() => replaceAll(view)}
             disabled={!hasQuery || matchInfo.total === 0}
-            className={labelBtnCls}
+            className="no-drag px-2.5 py-1 text-[12px] rounded-md text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40 disabled:cursor-default font-medium"
             title="全部替换 (⌘↵)"
           >
-            全部替换
+            全部
           </button>
         </div>
       )}
