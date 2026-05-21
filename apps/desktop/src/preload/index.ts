@@ -29,8 +29,11 @@ const api = {
   dialog: {
     openFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFolder'),
     openFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFile'),
-    saveFile: (defaultName?: string): Promise<string | null> =>
-      ipcRenderer.invoke('dialog:saveFile', defaultName),
+    saveFile: (
+      defaultName?: string,
+      filters?: Array<{ name: string; extensions: string[] }>
+    ): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:saveFile', defaultName, filters),
     confirmOpenChoice: (args: {
       candidateName: string
       currentName: string
@@ -49,11 +52,16 @@ const api = {
     readFile: (path: string): Promise<string> => ipcRenderer.invoke('fs:readFile', path),
     writeFile: (path: string, content: string): Promise<void> =>
       ipcRenderer.invoke('fs:writeFile', path, content),
+    rename: (oldPath: string, newPath: string): Promise<void> =>
+      ipcRenderer.invoke('fs:rename', oldPath, newPath),
     listDir: (path: string): Promise<FileNode[]> => ipcRenderer.invoke('fs:listDir', path),
     stat: (path: string): Promise<FileStat> => ipcRenderer.invoke('fs:stat', path)
   },
   exportPdf: (args: { html: string; defaultName: string }): Promise<string | null> =>
     ipcRenderer.invoke('export:pdf', args),
+  shell: {
+    reveal: (path: string): Promise<void> => ipcRenderer.invoke('shell:reveal', path)
+  },
   events: {
     onOpenFile(cb: (path: string) => void): () => void {
       const handler = (_: unknown, p: string): void => cb(p)

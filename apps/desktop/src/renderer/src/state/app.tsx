@@ -10,7 +10,8 @@ import {
 } from 'react'
 import type { FileNode, ViewMode } from '../types'
 import { ipc } from '../lib/ipc'
-import { addRecent } from '../lib/recent'
+import { addRecent, removeRecent } from '../lib/recent'
+import { validateRenameTarget } from '../lib/rename'
 
 type Workspace = {
   rootPath: string
@@ -29,18 +30,7 @@ type State = {
   currentFile: CurrentFile | null
   viewMode: ViewMode
   sidebarCollapsed: boolean
-  outlineVisible: boolean
   saving: boolean
-}
-
-const OUTLINE_KEY = 'quill:outlineVisible'
-
-function readInitialOutlineVisible(): boolean {
-  try {
-    return localStorage.getItem(OUTLINE_KEY) === '1'
-  } catch {
-    return false
-  }
 }
 
 type Action =
@@ -53,18 +43,16 @@ type Action =
   | { type: 'BEGIN_SAVE' }
   | { type: 'END_SAVE'; path: string; content: string }
   | { type: 'SAVE_FAILED' }
+  | { type: 'RENAME_FILE'; oldPath: string; newPath: string; newName: string }
   | { type: 'SET_VIEW_MODE'; mode: ViewMode }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'SET_SIDEBAR_COLLAPSED'; collapsed: boolean }
-  | { type: 'TOGGLE_OUTLINE' }
-  | { type: 'SET_OUTLINE_VISIBLE'; visible: boolean }
 
 const initialState: State = {
   workspace: null,
   currentFile: null,
   viewMode: 'split',
   sidebarCollapsed: false,
-  outlineVisible: readInitialOutlineVisible(),
   saving: false
 }
 
@@ -110,16 +98,30 @@ function reducer(s: State, a: Action): State {
       }
     case 'SAVE_FAILED':
       return { ...s, saving: false }
+    case 'RENAME_FILE': {
+      const updateTree = (nodes: FileNode[]): FileNode[] =>
+        nodes.map((n) => {
+          if (n.path === a.oldPath) return { ...n, path: a.newPath, name: a.newName }
+          if (n.children) return { ...n, children: updateTree(n.children) }
+          return n
+        })
+      return {
+        ...s,
+        currentFile:
+          s.currentFile?.path === a.oldPath
+            ? { ...s.currentFile, path: a.newPath }
+            : s.currentFile,
+        workspace: s.workspace
+          ? { ...s.workspace, tree: updateTree(s.workspace.tree) }
+          : null
+      }
+    }
     case 'SET_VIEW_MODE':
       return { ...s, viewMode: a.mode }
     case 'TOGGLE_SIDEBAR':
       return { ...s, sidebarCollapsed: !s.sidebarCollapsed }
     case 'SET_SIDEBAR_COLLAPSED':
       return { ...s, sidebarCollapsed: a.collapsed }
-    case 'TOGGLE_OUTLINE':
-      return { ...s, outlineVisible: !s.outlineVisible }
-    case 'SET_OUTLINE_VISIBLE':
-      return { ...s, outlineVisible: a.visible }
   }
 }
 
@@ -156,7 +158,9 @@ type Ctx = {
   save: () => Promise<void>
   setViewMode: (m: ViewMode) => void
   toggleSidebar: () => void
-  toggleOutline: () => void
+  /** Rename the currently open file on disk and reflect in tree + recent.
+   *  Throws if validation fails or fs.rename fails — caller must catch. */
+  renameCurrentFile: (newName: string) => Promise<void>
 }
 
 const AppContext = createContext<Ctx | null>(null)
@@ -274,16 +278,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setViewMode = useCallback((m: ViewMode) => dispatch({ type: 'SET_VIEW_MODE', mode: m }), [])
   const toggleSidebar = useCallback(() => dispatch({ type: 'TOGGLE_SIDEBAR' }), [])
-  const toggleOutline = useCallback(() => dispatch({ type: 'TOGGLE_OUTLINE' }), [])
 
-  // Persist outline visibility across sessions.
-  useEffect(() => {
-    try {
-      localStorage.setItem(OUTLINE_KEY, state.outlineVisible ? '1' : '0')
-    } catch {
-      /* localStorage unavailable; silently skip */
-    }
-  }, [state.outlineVisible])
+  const renameCurrentFile = useCallback(async (newName: string) => {
+    const cur = stateRef.current.currentFile
+    if (!cur?.path) throw new Error('未保存的文件不能重命名')
+    const result = validateRenameTarget(cur.path, newName)
+    if (!result.ok) throw new Error(result.error)
+    if (result.newPath === cur.path) return // no-op
+    await ipc.renameFile(cur.path, result.newPath)
+    dispatch({
+      type: 'RENAME_FILE',
+      oldPath: cur.path,
+      newPath: result.newPath,
+      newName: result.newName
+    })
+    removeRecent(cur.path)
+    addRecent({ type: 'file', path: result.newPath, name: result.newName })
+  }, [])
 
   // Wire native menu commands
   useEffect(() => {
@@ -330,7 +341,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       save,
       setViewMode,
       toggleSidebar,
-      toggleOutline
+      renameCurrentFile
     }),
     [
       state,
@@ -345,7 +356,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       save,
       setViewMode,
       toggleSidebar,
-      toggleOutline
+      renameCurrentFile
     ]
   )
 

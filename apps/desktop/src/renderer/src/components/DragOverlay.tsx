@@ -70,10 +70,10 @@ export function DragOverlay() {
   if (!over) return null
 
   return (
-    <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center bg-neutral-900/30 dark:bg-neutral-950/50 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-3 px-8 py-6 rounded-xl bg-white/90 dark:bg-neutral-900/90 border-2 border-dashed border-neutral-400 dark:border-neutral-600 shadow-lg">
-        <Upload className="w-8 h-8 text-neutral-500 dark:text-neutral-300" />
-        <span className="text-sm text-neutral-700 dark:text-neutral-200">
+    <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center bg-[var(--ink)]/20 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-3 px-10 py-7 rounded-[10px] bg-[var(--paper)] border-2 border-dashed border-[var(--accent)]/50 shadow-lg">
+        <Upload className="w-7 h-7 text-[var(--accent)]" />
+        <span className="font-serif-zh italic text-sm text-[var(--ink-soft)]">
           松手以打开 markdown 文件或文件夹
         </span>
       </div>

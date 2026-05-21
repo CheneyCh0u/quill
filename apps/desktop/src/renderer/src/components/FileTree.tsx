@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, FileText, File } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import type { FileNode } from '../types'
 
 type Props = {
@@ -11,7 +11,7 @@ type Props = {
 
 export function FileTree({ nodes, currentPath, dirty, onSelect }: Props) {
   return (
-    <ul className="text-sm">
+    <ul className="text-[13px] px-2">
       {nodes.map((n) => (
         <FileTreeNode
           key={n.path}
@@ -36,7 +36,7 @@ type NodeProps = {
 
 function FileTreeNode({ node, depth, currentPath, dirty, onSelect }: NodeProps) {
   const [open, setOpen] = useState(depth === 0)
-  const padLeft = 8 + depth * 12
+  const padLeft = 6 + depth * 12
   const isCurrent = node.path === currentPath
 
   if (node.isDirectory) {
@@ -45,10 +45,12 @@ function FileTreeNode({ node, depth, currentPath, dirty, onSelect }: NodeProps) 
         <button
           onClick={() => setOpen((v) => !v)}
           style={{ paddingLeft: padLeft }}
-          className="no-drag w-full flex items-center gap-1 py-1 pr-2 hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-700 dark:text-neutral-200"
+          className="no-drag w-full flex items-center gap-1 py-1 pr-2 rounded-md hover:bg-[var(--paper-soft)] text-[var(--ink)] transition"
         >
           <ChevronRight
-            className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''} text-neutral-400`}
+            className={`w-3 h-3 shrink-0 transition-transform ${
+              open ? 'rotate-90' : ''
+            } text-[var(--ink-faint)]`}
           />
           <span className="truncate text-left flex-1">{node.name}</span>
         </button>
@@ -75,17 +77,20 @@ function FileTreeNode({ node, depth, currentPath, dirty, onSelect }: NodeProps) 
       <li>
         <button
           onClick={() => onSelect(node.path)}
-          style={{ paddingLeft: padLeft + 16 }}
-          className={`no-drag w-full flex items-center gap-1.5 py-1 pr-2 text-left ${
+          style={{
+            paddingLeft: padLeft + 16,
+            boxShadow: isCurrent ? 'inset 2px 0 0 var(--accent)' : undefined
+          }}
+          className={`no-drag w-full flex items-center gap-1.5 py-1 pr-2 text-left rounded-md transition ${
             isCurrent
-              ? 'bg-neutral-200/70 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50'
-              : 'hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-700 dark:text-neutral-200'
+              ? 'bg-[var(--paper-soft)] text-[var(--ink)] font-medium'
+              : 'hover:bg-[var(--paper-soft)] text-[var(--ink-soft)] hover:text-[var(--ink)]'
           }`}
         >
-          <FileText className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
+          <span className="text-[10px] shrink-0 text-[var(--ink-faint)]">▸</span>
           <span className="truncate flex-1">{node.name}</span>
           {isCurrent && dirty && (
-            <span className="w-1.5 h-1.5 rounded-full bg-neutral-500 dark:bg-neutral-300 shrink-0" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] shrink-0" />
           )}
         </button>
       </li>
@@ -96,10 +101,10 @@ function FileTreeNode({ node, depth, currentPath, dirty, onSelect }: NodeProps) 
     <li>
       <div
         style={{ paddingLeft: padLeft + 16 }}
-        className="flex items-center gap-1.5 py-1 pr-2 text-neutral-400 dark:text-neutral-600 select-none cursor-default"
+        className="flex items-center gap-1.5 py-1 pr-2 text-[var(--ink-ghost)] select-none cursor-default"
         title="只支持打开 .md 文件"
       >
-        <File className="w-3.5 h-3.5 shrink-0" />
+        <span className="text-[10px] shrink-0">▪</span>
         <span className="truncate">{node.name}</span>
       </div>
     </li>
