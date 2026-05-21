@@ -11,6 +11,9 @@ export type InitialAction =
 export const windows = new Set<BrowserWindow>()
 const pendingActions = new WeakMap<BrowserWindow, InitialAction[]>()
 
+// Singleton settings window — focus existing instead of creating duplicate.
+let settingsWindow: BrowserWindow | null = null
+
 function flushPendingActions(win: BrowserWindow): void {
   const actions = pendingActions.get(win)
   if (!actions || actions.length === 0) return
@@ -60,6 +63,53 @@ export function createWindow(opts: { initial?: InitialAction } = {}): BrowserWin
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+
+  return win
+}
+
+export function openSettingsWindow(): BrowserWindow {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus()
+    return settingsWindow
+  }
+
+  const win = new BrowserWindow({
+    width: 720,
+    height: 540,
+    resizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    show: false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  settingsWindow = win
+  windows.add(win)
+
+  win.on('ready-to-show', () => win.show())
+  win.on('closed', () => {
+    windows.delete(win)
+    settingsWindow = null
+  })
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  if (isDev && process.env.ELECTRON_RENDERER_URL) {
+    win.loadURL(`${process.env.ELECTRON_RENDERER_URL}?settings=1`)
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), {
+      query: { settings: '1' }
+    })
   }
 
   return win

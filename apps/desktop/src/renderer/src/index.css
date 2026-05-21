@@ -152,7 +152,7 @@ body {
     Menlo,
     Consolas,
     monospace;
-  font-size: 14px;
+  font-size: var(--editor-font-size, 14px);
 }
 
 .cm-editor.cm-focused {

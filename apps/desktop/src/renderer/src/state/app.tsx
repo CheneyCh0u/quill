@@ -12,6 +12,7 @@ import type { FileNode, ViewMode } from '../types'
 import { ipc } from '../lib/ipc'
 import { addRecent, removeRecent } from '../lib/recent'
 import { validateRenameTarget } from '../lib/rename'
+import { usePrefs } from './prefs'
 
 type Workspace = {
   rootPath: string
@@ -36,8 +37,8 @@ type State = {
 type Action =
   | { type: 'OPEN_WORKSPACE'; rootPath: string; rootName: string; tree: FileNode[] }
   | { type: 'CLOSE_WORKSPACE' }
-  | { type: 'OPEN_FILE'; path: string; content: string }
-  | { type: 'NEW_FILE' }
+  | { type: 'OPEN_FILE'; path: string; content: string; viewMode: ViewMode }
+  | { type: 'NEW_FILE'; viewMode: ViewMode }
   | { type: 'CLOSE_FILE' }
   | { type: 'SET_BUFFER'; buffer: string }
   | { type: 'BEGIN_SAVE' }
@@ -70,13 +71,13 @@ function reducer(s: State, a: Action): State {
       return {
         ...s,
         currentFile: { path: a.path, content: a.content, buffer: a.content },
-        viewMode: 'split'
+        viewMode: a.viewMode
       }
     case 'NEW_FILE':
       return {
         ...s,
         currentFile: { path: null, content: '', buffer: '' },
-        viewMode: 'split'
+        viewMode: a.viewMode
       }
     case 'CLOSE_FILE':
       return { ...s, currentFile: null }
@@ -170,6 +171,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state)
   stateRef.current = state
 
+  // Snapshot prefs into a ref so action callbacks stay stable. When prefs
+  // change, the ref updates without re-creating every callback.
+  const { prefs } = usePrefs()
+  const prefsRef = useRef(prefs)
+  prefsRef.current = prefs
+
   const openFolderAt = useCallback(async (rootPath: string) => {
     const tree = await ipc.listDir(rootPath)
     const rootName = rootPath.split(/[/\\]/).filter(Boolean).pop() ?? rootPath
@@ -179,7 +186,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openFileAt = useCallback(async (path: string) => {
     const content = await ipc.readFile(path)
-    dispatch({ type: 'OPEN_FILE', path, content })
+    dispatch({
+      type: 'OPEN_FILE',
+      path,
+      content,
+      viewMode: prefsRef.current.defaultViewMode
+    })
     const name = path.split(/[/\\]/).pop() ?? path
     addRecent({ type: 'file', path, name })
   }, [])
@@ -187,7 +199,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Direct mutation of the current window's state — used by sidebar tree
   // clicks and by main-process-initiated initial actions (no prompt).
   const newFileInCurrent = useCallback(() => {
-    dispatch({ type: 'NEW_FILE' })
+    dispatch({ type: 'NEW_FILE', viewMode: prefsRef.current.defaultViewMode })
   }, [])
 
   const openPathWithPrompt = useCallback(

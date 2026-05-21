@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions } from 'electron'
+import { openSettingsWindow } from './windows'
 
 type MenuCommand =
   | 'new-file'
@@ -21,6 +22,12 @@ export function buildMenu(): void {
             label: app.name,
             submenu: [
               { role: 'about' },
+              { type: 'separator' },
+              {
+                label: 'Settings…',
+                accelerator: 'Cmd+,',
+                click: () => openSettingsWindow()
+              },
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
@@ -75,6 +82,16 @@ export function buildMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+W',
           click: () => send('close-folder')
         },
+        ...(!isMac
+          ? ([
+              { type: 'separator' },
+              {
+                label: 'Settings…',
+                accelerator: 'Ctrl+,',
+                click: () => openSettingsWindow()
+              }
+            ] as MenuItemConstructorOptions[])
+          : []),
         isMac ? { role: 'close' } : { role: 'quit' }
       ]
     },

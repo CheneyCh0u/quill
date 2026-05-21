@@ -7,6 +7,7 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { search } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import type { Theme } from '../types'
+import { usePrefs } from '../state/prefs'
 
 type Props = {
   value: string
@@ -16,6 +17,7 @@ type Props = {
 }
 
 export function Editor({ value, onChange, theme, onViewChange }: Props) {
+  const { prefs } = usePrefs()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
@@ -23,12 +25,15 @@ export function Editor({ value, onChange, theme, onViewChange }: Props) {
   onChangeRef.current = onChange
   onViewChangeRef.current = onViewChange
 
+  // Rebuild on theme OR showLineNumbers change — both affect the extension
+  // list and CM6 needs a fresh state.create. Font size lives on a CSS var
+  // (see index.css .cm-editor), so it reflows without a rebuild.
   useEffect(() => {
     if (!hostRef.current) return
 
     const extensions = [
       history(),
-      lineNumbers(),
+      ...(prefs.showLineNumbers ? [lineNumbers()] : []),
       highlightActiveLine(),
       // Search state + match decorations. Driven by our own React panel; we
       // never call `openSearchPanel`, so CM6's built-in panel never shows up.
@@ -52,9 +57,9 @@ export function Editor({ value, onChange, theme, onViewChange }: Props) {
       view.destroy()
       viewRef.current = null
     }
-    // theme rebuild only; value sync handled below
+    // value sync handled separately below
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme])
+  }, [theme, prefs.showLineNumbers])
 
   useEffect(() => {
     const view = viewRef.current

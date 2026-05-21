@@ -1,9 +1,9 @@
-import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
+import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { extname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
-import { createWindow, type InitialAction } from './windows'
+import { createWindow, openSettingsWindow, type InitialAction } from './windows'
 
 export type FileNode = {
   name: string
@@ -153,6 +153,12 @@ export function registerIpc(): void {
       createWindow({ initial })
     }
   )
+
+  ipcMain.handle('app:openSettings', async () => {
+    openSettingsWindow()
+  })
+
+  ipcMain.handle('app:version', async () => app.getVersion())
 
   ipcMain.handle(
     'dialog:confirmOpenChoice',

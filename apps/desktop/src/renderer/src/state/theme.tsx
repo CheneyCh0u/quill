@@ -39,6 +39,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mql.removeEventListener('change', onChange)
   }, [pref])
 
+  // Other windows (e.g. settings window) updating the theme key — pick up the
+  // change and rerender so all open windows stay in sync.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent): void => {
+      if (e.key !== STORAGE_KEY) return
+      setPrefState(getStoredPref())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])

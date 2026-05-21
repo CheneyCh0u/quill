@@ -18,6 +18,8 @@ export const ipc = {
     folderPath?: string
     newFile?: boolean
   }): Promise<void> => window.quill.app.openInNewWindow(args),
+  openSettingsWindow: (): Promise<void> => window.quill.app.openSettings(),
+  getAppVersion: (): Promise<string> => window.quill.app.version(),
   readFile: (path: string): Promise<string> => window.quill.fs.readFile(path),
   writeFile: (path: string, content: string): Promise<void> =>
     window.quill.fs.writeFile(path, content),

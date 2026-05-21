@@ -46,7 +46,9 @@ const api = {
       filePath?: string
       folderPath?: string
       newFile?: boolean
-    }): Promise<void> => ipcRenderer.invoke('app:openInNewWindow', args)
+    }): Promise<void> => ipcRenderer.invoke('app:openInNewWindow', args),
+    openSettings: (): Promise<void> => ipcRenderer.invoke('app:openSettings'),
+    version: (): Promise<string> => ipcRenderer.invoke('app:version')
   },
   fs: {
     readFile: (path: string): Promise<string> => ipcRenderer.invoke('fs:readFile', path),

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { AppProvider, useApp } from './state/app'
 import { ThemeProvider } from './state/theme'
+import { PrefsProvider } from './state/prefs'
 import { Sidebar } from './components/Sidebar'
 import { RightPane } from './components/RightPane'
 import { EmptyState } from './components/EmptyState'
@@ -44,9 +45,11 @@ function Shell() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppProvider>
-        <Shell />
-      </AppProvider>
+      <PrefsProvider>
+        <AppProvider>
+          <Shell />
+        </AppProvider>
+      </PrefsProvider>
     </ThemeProvider>
   )
 }
