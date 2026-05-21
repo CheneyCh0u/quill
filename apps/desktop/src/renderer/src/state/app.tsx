@@ -29,7 +29,18 @@ type State = {
   currentFile: CurrentFile | null
   viewMode: ViewMode
   sidebarCollapsed: boolean
+  outlineVisible: boolean
   saving: boolean
+}
+
+const OUTLINE_KEY = 'quill:outlineVisible'
+
+function readInitialOutlineVisible(): boolean {
+  try {
+    return localStorage.getItem(OUTLINE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 type Action =
@@ -45,12 +56,15 @@ type Action =
   | { type: 'SET_VIEW_MODE'; mode: ViewMode }
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'SET_SIDEBAR_COLLAPSED'; collapsed: boolean }
+  | { type: 'TOGGLE_OUTLINE' }
+  | { type: 'SET_OUTLINE_VISIBLE'; visible: boolean }
 
 const initialState: State = {
   workspace: null,
   currentFile: null,
   viewMode: 'split',
   sidebarCollapsed: false,
+  outlineVisible: readInitialOutlineVisible(),
   saving: false
 }
 
@@ -102,6 +116,10 @@ function reducer(s: State, a: Action): State {
       return { ...s, sidebarCollapsed: !s.sidebarCollapsed }
     case 'SET_SIDEBAR_COLLAPSED':
       return { ...s, sidebarCollapsed: a.collapsed }
+    case 'TOGGLE_OUTLINE':
+      return { ...s, outlineVisible: !s.outlineVisible }
+    case 'SET_OUTLINE_VISIBLE':
+      return { ...s, outlineVisible: a.visible }
   }
 }
 
@@ -131,6 +149,7 @@ type Ctx = {
   save: () => Promise<void>
   setViewMode: (m: ViewMode) => void
   toggleSidebar: () => void
+  toggleOutline: () => void
 }
 
 const AppContext = createContext<Ctx | null>(null)
@@ -206,6 +225,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setViewMode = useCallback((m: ViewMode) => dispatch({ type: 'SET_VIEW_MODE', mode: m }), [])
   const toggleSidebar = useCallback(() => dispatch({ type: 'TOGGLE_SIDEBAR' }), [])
+  const toggleOutline = useCallback(() => dispatch({ type: 'TOGGLE_OUTLINE' }), [])
+
+  // Persist outline visibility across sessions.
+  useEffect(() => {
+    try {
+      localStorage.setItem(OUTLINE_KEY, state.outlineVisible ? '1' : '0')
+    } catch {
+      /* localStorage unavailable; silently skip */
+    }
+  }, [state.outlineVisible])
 
   // Wire native menu commands
   useEffect(() => {
@@ -239,7 +268,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBuffer,
       save,
       setViewMode,
-      toggleSidebar
+      toggleSidebar,
+      toggleOutline
     }),
     [
       state,
@@ -252,7 +282,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBuffer,
       save,
       setViewMode,
-      toggleSidebar
+      toggleSidebar,
+      toggleOutline
     ]
   )
 

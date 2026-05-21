@@ -1,10 +1,10 @@
-import { PanelLeftOpen } from 'lucide-react'
+import { PanelLeftOpen, List, ListX } from 'lucide-react'
 import { useApp } from '../state/app'
 import { ModeSwitcher } from './ModeSwitcher'
 import { ExportMenu } from './ExportMenu'
 
 export function PaneHeader() {
-  const { state, mode, dirty, setViewMode, toggleSidebar } = useApp()
+  const { state, mode, dirty, setViewMode, toggleSidebar, toggleOutline } = useApp()
   const cur = state.currentFile
   const showExpand = mode === 'workspace' && state.sidebarCollapsed
 
@@ -39,6 +39,21 @@ export function PaneHeader() {
       {cur && (
         <>
           <ExportMenu />
+          <button
+            onClick={toggleOutline}
+            title={state.outlineVisible ? '收起大纲' : '显示大纲'}
+            className={`no-drag p-1.5 rounded ${
+              state.outlineVisible
+                ? 'bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-50'
+                : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'
+            }`}
+          >
+            {state.outlineVisible ? (
+              <ListX className="w-3.5 h-3.5" />
+            ) : (
+              <List className="w-3.5 h-3.5" />
+            )}
+          </button>
           <ModeSwitcher value={state.viewMode} onChange={setViewMode} />
         </>
       )}
