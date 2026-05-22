@@ -143,6 +143,20 @@ export function Vault(): JSX.Element {
             vault={vault}
             selectedPath={selected?.path ?? null}
             onSelect={trySwitchFile}
+            onPathRenamed={(oldPath, newPath) => {
+              // If the renamed path is the open file, fold the new path into
+              // selected so the editor header updates without reloading.
+              if (selected && selected.path === oldPath) {
+                setSelected({ ...selected, path: newPath, name: newPath.split('/').pop() ?? newPath })
+              }
+            }}
+            onPathDeleted={(path) => {
+              if (selected && (selected.path === path || selected.path.startsWith(`${path}/`))) {
+                setSelected(null)
+                setSource('')
+                setBuffer('')
+              }
+            }}
           />
         </div>
       </aside>

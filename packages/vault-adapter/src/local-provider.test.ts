@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { LocalProvider, type QuillFsBridge } from './local-provider'
+import { NotSupportedError } from './types'
 
 function makeBridge(): {
   bridge: QuillFsBridge
@@ -76,5 +77,25 @@ describe('LocalProvider', () => {
     const result = await provider.stat('/x/a.md')
     expect(calls).toEqual([{ method: 'stat', args: ['/x/a.md'] }])
     expect(result).toEqual({ isFile: true, isDirectory: false, size: 42, mtime: 100 })
+  })
+
+  test('mkdir rejects with NotSupportedError (no IPC backing yet)', async () => {
+    const { bridge } = makeBridge()
+    const provider = new LocalProvider(bridge)
+    await expect(provider.mkdir('foo')).rejects.toBeInstanceOf(NotSupportedError)
+  })
+
+  test('delete rejects with NotSupportedError', async () => {
+    const { bridge } = makeBridge()
+    const provider = new LocalProvider(bridge)
+    await expect(provider.delete('foo.md')).rejects.toBeInstanceOf(NotSupportedError)
+  })
+
+  test('deleteDir rejects with NotSupportedError', async () => {
+    const { bridge } = makeBridge()
+    const provider = new LocalProvider(bridge)
+    await expect(provider.deleteDir('foo', true)).rejects.toBeInstanceOf(
+      NotSupportedError
+    )
   })
 })

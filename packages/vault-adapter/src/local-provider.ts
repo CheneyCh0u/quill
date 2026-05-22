@@ -1,5 +1,5 @@
 import type { FileNode, FileStat } from '@quill/shared-types'
-import type { VaultProvider } from './types'
+import { NotSupportedError, type VaultProvider } from './types'
 
 /**
  * Structural subset of `window.quill.fs` (defined in the desktop preload)
@@ -38,5 +38,21 @@ export class LocalProvider implements VaultProvider {
 
   stat(path: string): Promise<FileStat> {
     return this.fs.stat(path)
+  }
+
+  // The desktop IPC doesn't expose mkdir / delete / deleteDir yet — no
+  // current consumer in the renderer calls them. When the workspace tree
+  // grows new/delete UI on desktop, the main process adds matching IPC
+  // handlers and these stubs get real implementations.
+  mkdir(_path: string): Promise<void> {
+    return Promise.reject(new NotSupportedError('mkdir', this.kind))
+  }
+
+  delete(_path: string): Promise<void> {
+    return Promise.reject(new NotSupportedError('delete', this.kind))
+  }
+
+  deleteDir(_path: string, _recursive: boolean): Promise<void> {
+    return Promise.reject(new NotSupportedError('deleteDir', this.kind))
   }
 }

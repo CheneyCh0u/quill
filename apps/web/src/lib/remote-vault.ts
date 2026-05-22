@@ -111,4 +111,25 @@ export class RemoteVault implements VaultProvider {
       mtime: 0
     }
   }
+
+  async mkdir(path: string): Promise<void> {
+    await call(this.url('/api/vault/mkdir'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path.replace(/^\/+/, '') })
+    })
+  }
+
+  async delete(path: string): Promise<void> {
+    await call(this.url(`/api/vault/file/${encodeURI(path)}`), {
+      method: 'DELETE'
+    })
+  }
+
+  async deleteDir(path: string, recursive: boolean): Promise<void> {
+    const url = this.url(
+      `/api/vault/dir/${encodeURI(path)}${recursive ? '?recursive=1' : ''}`
+    )
+    await call(url, { method: 'DELETE' })
+  }
 }
