@@ -1,4 +1,5 @@
 import type { Scope } from './scope'
+import type { Plan } from './plan'
 
 const MAX_BUFFER_CHARS = 4000
 const MAX_SELECTION_CHARS = 1000
@@ -7,11 +8,16 @@ const MAX_SELECTION_CHARS = 1000
  * Pure system prompt builder — declares scope constraints, lists available
  * tools, and injects the user's current editing context as a snapshot.
  * Kept dependency-free so it's directly testable without electron stubs.
+ *
+ * When `plan` is provided (Build is running after Plan), the plan is inlined
+ * as guidance — Build should follow it but is allowed to deviate when the
+ * world doesn't match expectations.
  */
 export function buildSystemPrompt(
   scope: Scope,
   currentBuffer?: string,
-  currentSelection?: string
+  currentSelection?: string,
+  plan?: Plan
 ): string {
   const lines: string[] = []
   lines.push("You are Quill's writing & coding agent.")
@@ -100,6 +106,25 @@ export function buildSystemPrompt(
         : currentSelection
     lines.push('')
     lines.push(`User's selection:\n---\n${sel}\n---`)
+  }
+
+  if (plan && plan.steps.length > 0) {
+    lines.push('')
+    lines.push('## Approved plan')
+    lines.push(
+      'A Plan agent has already produced the following steps for this request. ' +
+        'Follow them in order. You may adjust or deviate when execution reveals ' +
+        'something the plan did not anticipate — but explain why in your reply ' +
+        'before doing so.'
+    )
+    lines.push('')
+    for (let i = 0; i < plan.steps.length; i++) {
+      const s = plan.steps[i]
+      const prefix = `${i + 1}. ${s.title}`
+      lines.push(prefix)
+      if (s.why) lines.push(`   why: ${s.why}`)
+      if (s.files && s.files.length > 0) lines.push(`   files: ${s.files.join(', ')}`)
+    }
   }
 
   return lines.join('\n')

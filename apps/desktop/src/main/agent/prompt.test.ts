@@ -87,4 +87,26 @@ describe('buildSystemPrompt', () => {
     const p = buildSystemPrompt(scope)
     expect(p).toContain('same language')
   })
+
+  it('injects plan steps when provided and tells Build to follow them', () => {
+    const scope: Scope = { kind: 'workspace', root: '/r' }
+    const plan = {
+      steps: [
+        { id: 's1', title: 'Read README.md', why: 'understand intent' },
+        { id: 's2', title: 'Update version in package.json' }
+      ]
+    }
+    const p = buildSystemPrompt(scope, undefined, undefined, plan)
+    expect(p).toMatch(/plan|approved plan|follow/i)
+    expect(p).toContain('Read README.md')
+    expect(p).toContain('Update version in package.json')
+    // Build should be allowed to deviate when needed but explain why — otherwise
+    // it'd be brittle to discoveries during execution.
+    expect(p).toMatch(/deviat|adjust|explain/i)
+  })
+
+  it('omits plan section when plan is undefined', () => {
+    const p = buildSystemPrompt({ kind: 'workspace', root: '/r' })
+    expect(p).not.toMatch(/approved plan|follow this plan/i)
+  })
 })

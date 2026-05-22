@@ -10,21 +10,44 @@ import {
   FilePlus,
   FilePen,
   FileText,
-  Check
+  Check,
+  ListChecks,
+  Route as RouteIcon,
+  PlayCircle
 } from 'lucide-react'
 import { useApp } from '../state/app'
 import { ipc } from '../lib/ipc'
 import { render as renderMd } from '../lib/markdown'
-import type { AgentEvent, ApprovalPayload, Scope } from '../types'
+import type {
+  AgentEvent,
+  AgentMode,
+  ApprovalPayload,
+  PlanStep,
+  RouteDecision,
+  Scope
+} from '../types'
 
 const WRITE_TOOL_NAMES = new Set(['write_file', 'apply_edit', 'create_file'])
+
+/**
+ * Parse a slash command prefix to force a routing mode. `/plan ...` and
+ * `/build ...` skip the Router. Anything else (including bare `/plan` with no
+ * text) goes through 'auto'.
+ */
+function parseSlashCommand(input: string): { mode: AgentMode; prompt: string } {
+  const m = input.match(/^\/(plan|build)\s+([\s\S]+)$/)
+  if (m) {
+    return { mode: m[1] as AgentMode, prompt: m[2].trim() }
+  }
+  return { mode: 'auto', prompt: input }
+}
 
 type DefaultProvider = { id: string; model: string } | null
 
 type ApprovalStatus = 'pending' | 'approved' | 'rejected'
 
 type Item =
-  | { kind: 'user'; text: string }
+  | { kind: 'user'; text: string; forcedMode?: 'plan' | 'build' }
   | { kind: 'assistant-text'; text: string }
   | { kind: 'tool-call'; toolCallId: string; name: string; args: unknown }
   | { kind: 'tool-result'; toolCallId: string; name: string; result: unknown }
@@ -37,6 +60,9 @@ type Item =
       resultError?: string
       resultPath?: string
     }
+  | { kind: 'route'; decision: RouteDecision }
+  | { kind: 'plan'; steps: PlanStep[]; status: 'streaming' | 'complete' }
+  | { kind: 'phase-divider'; phase: 'plan' | 'build' }
   | { kind: 'error'; message: string }
   | { kind: 'finish'; usage?: unknown }
 
@@ -212,6 +238,34 @@ export function AgentPanel({ onClose }: Props) {
           }
         ]
       }
+      if (event.type === 'route-decision') {
+        return [...prev, { kind: 'route', decision: event.decision }]
+      }
+      if (event.type === 'phase-start') {
+        // Only show a divider when Build follows Plan — Plan's own phase-start
+        // would be redundant with the plan card appearing.
+        if (event.phase === 'build') {
+          return [...prev, { kind: 'phase-divider', phase: 'build' }]
+        }
+        return prev
+      }
+      if (event.type === 'plan-delta') {
+        const idx = prev.findIndex((it) => it.kind === 'plan' && it.status === 'streaming')
+        const partialSteps = (event.partial.steps ?? []).filter(
+          (s): s is PlanStep => !!s && typeof s.title === 'string' && s.title.length > 0
+        )
+        if (idx === -1) {
+          return [...prev, { kind: 'plan', steps: partialSteps, status: 'streaming' }]
+        }
+        const next: Item = { kind: 'plan', steps: partialSteps, status: 'streaming' }
+        return [...prev.slice(0, idx), next, ...prev.slice(idx + 1)]
+      }
+      if (event.type === 'plan-complete') {
+        const idx = prev.findIndex((it) => it.kind === 'plan' && it.status === 'streaming')
+        const final: Item = { kind: 'plan', steps: event.plan.steps, status: 'complete' }
+        if (idx === -1) return [...prev, final]
+        return [...prev.slice(0, idx), final, ...prev.slice(idx + 1)]
+      }
       if (event.type === 'error') {
         return [...prev, { kind: 'error', message: event.message }]
       }
@@ -236,9 +290,18 @@ export function AgentPanel({ onClose }: Props) {
 
   const handleSend = useCallback(async () => {
     if (!canRun || !provider || !scope) return
-    const prompt = input.trim()
+    const raw = input.trim()
+    const parsed = parseSlashCommand(raw)
+    if (!parsed.prompt) return // bare `/plan` with no text — ignore
     setInput('')
-    setItems((prev) => [...prev, { kind: 'user', text: prompt }])
+    setItems((prev) => [
+      ...prev,
+      {
+        kind: 'user',
+        text: parsed.prompt,
+        forcedMode: parsed.mode === 'auto' ? undefined : (parsed.mode as 'plan' | 'build')
+      }
+    ])
     const newRunId = genRunId()
     setRunId(newRunId)
     setBusy(true)
@@ -247,8 +310,9 @@ export function AgentPanel({ onClose }: Props) {
         runId: newRunId,
         providerId: provider.id,
         modelId: provider.model,
-        prompt,
+        prompt: parsed.prompt,
         scope,
+        mode: parsed.mode,
         currentBuffer: cur?.buffer,
         currentSelection: undefined
       })
@@ -423,9 +487,23 @@ function ItemView({
   if (item.kind === 'user') {
     return (
       <div className="ml-6 px-3 py-2 rounded-md bg-[var(--paper-soft)] text-[13px] text-[var(--ink)] whitespace-pre-wrap">
+        {item.forcedMode && (
+          <span className="inline-block mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono text-[var(--accent)] bg-[var(--accent-soft)] align-baseline">
+            /{item.forcedMode}
+          </span>
+        )}
         {item.text}
       </div>
     )
+  }
+  if (item.kind === 'route') {
+    return <RouteBadgeView decision={item.decision} />
+  }
+  if (item.kind === 'plan') {
+    return <PlanCardView steps={item.steps} status={item.status} />
+  }
+  if (item.kind === 'phase-divider') {
+    return <PhaseDividerView phase={item.phase} />
   }
   if (item.kind === 'assistant-text') {
     return <AssistantText text={item.text} />
@@ -459,6 +537,102 @@ function ItemView({
 function AssistantText({ text }: { text: string }) {
   const html = useMemo(() => renderMd(text), [text])
   return <div className="prose-agent" dangerouslySetInnerHTML={{ __html: html }} />
+}
+
+function RouteBadgeView({ decision }: { decision: RouteDecision }) {
+  const label = decision.agent === 'plan' ? 'via Plan → Build' : 'via Build'
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-[var(--ink-faint)] font-serif-zh italic">
+      <RouteIcon className="w-3 h-3" />
+      <span>{label}</span>
+      <span className="text-[var(--ink-ghost)]">·</span>
+      <span className="text-[var(--ink-soft)] not-italic font-sans truncate" title={decision.reason}>
+        {decision.reason}
+      </span>
+    </div>
+  )
+}
+
+function PhaseDividerView({ phase }: { phase: 'plan' | 'build' }) {
+  return (
+    <div className="flex items-center gap-2 text-[11px] text-[var(--ink-faint)] py-1">
+      <div className="flex-1 border-t border-[var(--rule-soft)]" />
+      <span className="flex items-center gap-1 font-serif-zh italic">
+        <PlayCircle className="w-3 h-3 text-[var(--accent)]" />
+        {phase === 'build' ? '开始执行' : '开始规划'}
+      </span>
+      <div className="flex-1 border-t border-[var(--rule-soft)]" />
+    </div>
+  )
+}
+
+function PlanCardView({
+  steps,
+  status
+}: {
+  steps: PlanStep[]
+  status: 'streaming' | 'complete'
+}) {
+  return (
+    <div className="rounded-md border border-[var(--rule)] bg-[var(--paper)] overflow-hidden">
+      <div className="px-3 py-2 flex items-center gap-2 text-[12px] bg-[var(--paper-soft)] border-b border-[var(--rule-soft)]">
+        <ListChecks className="w-3.5 h-3.5 text-[var(--accent)]" />
+        <span className="font-serif-zh italic text-[var(--ink-soft)]">计划</span>
+        {status === 'streaming' && (
+          <Loader2 className="w-3 h-3 animate-spin text-[var(--ink-faint)]" />
+        )}
+        <span className="ml-auto font-mono text-[11px] text-[var(--ink-faint)]">
+          {steps.length} 步
+        </span>
+      </div>
+      <ol className="px-3 py-2 space-y-1.5">
+        {steps.map((step, i) => (
+          <PlanStepItem key={step.id ?? `s-${i}`} index={i + 1} step={step} />
+        ))}
+        {steps.length === 0 && (
+          <li className="text-[12px] text-[var(--ink-faint)] font-serif-zh italic py-1">
+            正在生成…
+          </li>
+        )}
+      </ol>
+    </div>
+  )
+}
+
+function PlanStepItem({ index, step }: { index: number; step: PlanStep }) {
+  const [open, setOpen] = useState(false)
+  const hasDetail = !!step.why || (step.files && step.files.length > 0)
+  return (
+    <li className="text-[12px] leading-[1.5]">
+      <button
+        onClick={() => hasDetail && setOpen((v) => !v)}
+        className={`no-drag w-full flex items-start gap-2 text-left ${
+          hasDetail ? 'cursor-pointer hover:text-[var(--ink)]' : 'cursor-default'
+        }`}
+      >
+        <span className="font-mono text-[var(--ink-faint)] shrink-0 mt-[1px]">
+          {String(index).padStart(2, '0')}.
+        </span>
+        <span className="text-[var(--ink)] flex-1">{step.title}</span>
+        {hasDetail &&
+          (open ? (
+            <ChevronDown className="w-3 h-3 mt-1 text-[var(--ink-faint)]" />
+          ) : (
+            <ChevronRight className="w-3 h-3 mt-1 text-[var(--ink-faint)]" />
+          ))}
+      </button>
+      {open && hasDetail && (
+        <div className="ml-7 mt-1 text-[11px] text-[var(--ink-soft)] space-y-0.5">
+          {step.why && <div className="font-serif-zh italic">why: {step.why}</div>}
+          {step.files && step.files.length > 0 && (
+            <div className="font-mono text-[var(--ink-faint)] truncate" title={step.files.join(', ')}>
+              files: {step.files.join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
+  )
 }
 
 function shortPath(p: string): string {

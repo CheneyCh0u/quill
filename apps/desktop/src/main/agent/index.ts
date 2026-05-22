@@ -4,16 +4,25 @@ import { makeTools } from './tools'
 import { buildSystemPrompt } from './prompt'
 import type { Scope } from './scope'
 import { createApprovalsManager, type ApprovalPayload, type ApprovalResponse } from './approvals'
+import { classifyIntent, type RouteDecision } from './router'
+import { streamPlan, type Plan } from './plan'
 
 export type { Scope } from './scope'
 export type { ApprovalPayload, ApprovalResponse } from './approvals'
+export type { RouteDecision } from './router'
+export type { Plan, PlanStep } from './plan'
 export { buildSystemPrompt } from './prompt'
+
+export type AgentMode = 'auto' | 'plan' | 'build'
 
 export type AgentRunArgs = {
   providerId: string
   modelId: string
   prompt: string
   scope: Scope
+  /** Routing mode. 'auto' lets the Router classify; 'plan' forces the
+   *  Plan→Build chain; 'build' skips Router and Plan entirely. */
+  mode?: AgentMode
   /** Snapshot of the user's currently open file at run start. Injected into
    *  the system prompt so the agent has the editing context without burning
    *  a read_file tool call. */
@@ -27,6 +36,10 @@ export type AgentEvent =
   | { type: 'tool-call'; toolCallId: string; name: string; args: unknown }
   | { type: 'tool-result'; toolCallId: string; name: string; result: unknown }
   | { type: 'tool-approval-request'; toolCallId: string; payload: ApprovalPayload }
+  | { type: 'route-decision'; decision: RouteDecision }
+  | { type: 'phase-start'; phase: 'plan' | 'build' }
+  | { type: 'plan-delta'; partial: Partial<Plan> }
+  | { type: 'plan-complete'; plan: Plan }
   | { type: 'step-finish'; usage?: unknown }
   | { type: 'finish'; usage?: unknown; finishReason?: string }
   | { type: 'error'; message: string }
@@ -53,6 +66,16 @@ export function respondApproval(
   return approvals.respond(runId, toolCallId, response)
 }
 
+/**
+ * Top-level entry. Orchestrates Router → Plan → Build based on `args.mode`:
+ * - 'build': skip routing, run Build directly (Phase 2/3 behavior).
+ * - 'plan':  force Plan-then-Build.
+ * - 'auto' (default): call Router; if it picks 'plan', run Plan-then-Build,
+ *   otherwise run Build directly.
+ *
+ * Cancellation: one AbortController feeds Router + Plan + Build, so a single
+ * cancel() short-circuits any phase. Approvals queue is reset on top.
+ */
 export async function runAgent(
   runId: string,
   args: AgentRunArgs,
@@ -60,90 +83,40 @@ export async function runAgent(
 ): Promise<void> {
   const controller = new AbortController()
   runs.set(runId, controller)
+  const mode: AgentMode = args.mode ?? 'auto'
 
   try {
     const model = await makeModel(args.providerId, args.modelId)
-    const requestApproval = (
-      toolCallId: string,
-      payload: ApprovalPayload
-    ): Promise<ApprovalResponse> => {
-      onEvent({ type: 'tool-approval-request', toolCallId, payload })
-      return approvals.request(runId, toolCallId, payload)
-    }
-    const tools =
-      args.scope.kind === 'untitled'
-        ? undefined
-        : makeTools(args.scope, requestApproval)
 
-    const result = streamText({
-      model,
-      system: buildSystemPrompt(args.scope, args.currentBuffer, args.currentSelection),
-      messages: [{ role: 'user', content: args.prompt }],
-      tools,
-      stopWhen: stepCountIs(15),
-      abortSignal: controller.signal
-    })
-
-    for await (const chunk of result.fullStream) {
-      // ai-sdk v6 stream parts are a discriminated union. We narrow with
-      // `chunk.type` and pull the fields we care about. Use `unknown` casts
-      // sparingly because the typed shape changes between minor versions.
-      switch (chunk.type) {
-        case 'text-delta':
-          onEvent({
-            type: 'text-delta',
-            delta:
-              (chunk as unknown as { text?: string; delta?: string }).text ??
-              (chunk as unknown as { delta?: string }).delta ??
-              ''
-          })
-          break
-        case 'tool-call':
-          onEvent({
-            type: 'tool-call',
-            toolCallId: chunk.toolCallId,
-            name: chunk.toolName,
-            args:
-              (chunk as unknown as { input?: unknown }).input ??
-              (chunk as unknown as { args?: unknown }).args
-          })
-          break
-        case 'tool-result':
-          onEvent({
-            type: 'tool-result',
-            toolCallId: chunk.toolCallId,
-            name: chunk.toolName,
-            result:
-              (chunk as unknown as { output?: unknown }).output ??
-              (chunk as unknown as { result?: unknown }).result
-          })
-          break
-        case 'finish-step':
-          onEvent({
-            type: 'step-finish',
-            usage: (chunk as unknown as { usage?: unknown }).usage
-          })
-          break
-        case 'finish':
-          onEvent({
-            type: 'finish',
-            usage:
-              (chunk as unknown as { totalUsage?: unknown }).totalUsage ??
-              (chunk as unknown as { usage?: unknown }).usage,
-            finishReason: (chunk as unknown as { finishReason?: string }).finishReason
-          })
-          break
-        case 'error':
-          onEvent({
-            type: 'error',
-            message: String((chunk as unknown as { error?: unknown }).error)
-          })
-          break
-        default:
-          // Unhandled chunk type (reasoning, redacted, etc.) — skip silently
-          break
-      }
+    let route: 'plan' | 'build'
+    if (mode === 'build') {
+      route = 'build'
+    } else if (mode === 'plan') {
+      route = 'plan'
+    } else {
+      // mode === 'auto' — Router decides. Untitled scope short-circuits to
+      // 'build' inside classifyIntent without an LLM call.
+      const decision = await classifyIntent({
+        model,
+        prompt: args.prompt,
+        scope: args.scope,
+        abortSignal: controller.signal
+      })
+      onEvent({ type: 'route-decision', decision })
+      route = decision.agent
     }
+
+    let plan: Plan | undefined
+    if (route === 'plan') {
+      onEvent({ type: 'phase-start', phase: 'plan' })
+      plan = await runPlanPhase(args, model, controller, onEvent)
+      // If plan failed (returned undefined) or was cancelled, runPlanPhase
+      // has already emitted error/finish — bail.
+      if (!plan) return
+      onEvent({ type: 'phase-start', phase: 'build' })
+    }
+
+    await runBuildPhase(runId, args, model, plan, controller, onEvent)
   } catch (err) {
     if (controller.signal.aborted) {
       onEvent({ type: 'error', message: 'cancelled' })
@@ -154,10 +127,138 @@ export async function runAgent(
       })
     }
   } finally {
-    // Belt-and-suspenders: if the run exited with approvals still pending
-    // (shouldn't happen — streamText resolves only after tool execute does),
-    // clear them so the manager doesn't leak.
     approvals.cancelRun(runId)
     runs.delete(runId)
+  }
+}
+
+/**
+ * Plan phase. Streams partial objects so the renderer can render steps as
+ * they materialize. Returns the validated final plan, or `undefined` if the
+ * run was aborted or the plan failed to parse.
+ */
+async function runPlanPhase(
+  args: AgentRunArgs,
+  model: Awaited<ReturnType<typeof makeModel>>,
+  controller: AbortController,
+  onEvent: (event: AgentEvent) => void
+): Promise<Plan | undefined> {
+  const { partial, final } = streamPlan({
+    model,
+    prompt: args.prompt,
+    scope: args.scope,
+    currentBuffer: args.currentBuffer,
+    abortSignal: controller.signal
+  })
+  // Drive the partial stream so the UI sees plan steps appearing live, but
+  // also wait for `final` to validate the full plan against the schema.
+  try {
+    for await (const chunk of partial) {
+      if (controller.signal.aborted) return undefined
+      onEvent({ type: 'plan-delta', partial: chunk })
+    }
+    const full = await final
+    onEvent({ type: 'plan-complete', plan: full })
+    return full
+  } catch (err) {
+    if (controller.signal.aborted) {
+      onEvent({ type: 'error', message: 'cancelled' })
+    } else {
+      onEvent({
+        type: 'error',
+        message: 'plan: ' + (err instanceof Error ? err.message : String(err))
+      })
+    }
+    return undefined
+  }
+}
+
+/**
+ * Build phase. Same streamText loop Phase 2/3 had; isolated here so the
+ * orchestrator can call it with or without a preceding plan.
+ */
+async function runBuildPhase(
+  runId: string,
+  args: AgentRunArgs,
+  model: Awaited<ReturnType<typeof makeModel>>,
+  plan: Plan | undefined,
+  controller: AbortController,
+  onEvent: (event: AgentEvent) => void
+): Promise<void> {
+  const requestApproval = (
+    toolCallId: string,
+    payload: ApprovalPayload
+  ): Promise<ApprovalResponse> => {
+    onEvent({ type: 'tool-approval-request', toolCallId, payload })
+    return approvals.request(runId, toolCallId, payload)
+  }
+  const tools =
+    args.scope.kind === 'untitled' ? undefined : makeTools(args.scope, requestApproval)
+
+  const result = streamText({
+    model,
+    system: buildSystemPrompt(args.scope, args.currentBuffer, args.currentSelection, plan),
+    messages: [{ role: 'user', content: args.prompt }],
+    tools,
+    stopWhen: stepCountIs(15),
+    abortSignal: controller.signal
+  })
+
+  for await (const chunk of result.fullStream) {
+    switch (chunk.type) {
+      case 'text-delta':
+        onEvent({
+          type: 'text-delta',
+          delta:
+            (chunk as unknown as { text?: string; delta?: string }).text ??
+            (chunk as unknown as { delta?: string }).delta ??
+            ''
+        })
+        break
+      case 'tool-call':
+        onEvent({
+          type: 'tool-call',
+          toolCallId: chunk.toolCallId,
+          name: chunk.toolName,
+          args:
+            (chunk as unknown as { input?: unknown }).input ??
+            (chunk as unknown as { args?: unknown }).args
+        })
+        break
+      case 'tool-result':
+        onEvent({
+          type: 'tool-result',
+          toolCallId: chunk.toolCallId,
+          name: chunk.toolName,
+          result:
+            (chunk as unknown as { output?: unknown }).output ??
+            (chunk as unknown as { result?: unknown }).result
+        })
+        break
+      case 'finish-step':
+        onEvent({
+          type: 'step-finish',
+          usage: (chunk as unknown as { usage?: unknown }).usage
+        })
+        break
+      case 'finish':
+        onEvent({
+          type: 'finish',
+          usage:
+            (chunk as unknown as { totalUsage?: unknown }).totalUsage ??
+            (chunk as unknown as { usage?: unknown }).usage,
+          finishReason: (chunk as unknown as { finishReason?: string }).finishReason
+        })
+        break
+      case 'error':
+        onEvent({
+          type: 'error',
+          message: String((chunk as unknown as { error?: unknown }).error)
+        })
+        break
+      default:
+        // Unhandled chunk type (reasoning, redacted, etc.) — skip silently
+        break
+    }
   }
 }
