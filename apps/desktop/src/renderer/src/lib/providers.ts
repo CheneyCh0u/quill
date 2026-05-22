@@ -50,11 +50,14 @@ export const PROVIDERS: ProviderProfile[] = [
   },
   {
     id: 'kimi',
-    name: 'Kimi (Moonshot)',
+    name: 'Kimi (Coding Plan)',
     baseURL: 'https://api.kimi.com/coding/v1',
-    defaultModel: 'kimi-k2.5',
-    kind: 'openai-compatible',
-    docs: 'https://platform.kimi.ai/console/api-keys'
+    defaultModel: 'kimi-for-coding',
+    // Kimi Coding endpoint allowlists clients that speak the Anthropic
+    // protocol; OpenAI-compatible calls return "only available for Coding
+    // Agents such as Kimi CLI, Claude Code…".
+    kind: 'anthropic',
+    docs: 'https://platform.moonshot.cn/console/api-keys'
   },
   {
     id: 'deepseek',

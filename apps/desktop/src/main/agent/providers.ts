@@ -13,7 +13,12 @@ type ProviderKind = 'anthropic' | 'openai-compatible'
 const PROFILES: Record<string, { kind: ProviderKind; baseURL: string }> = {
   anthropic: { kind: 'anthropic', baseURL: 'https://api.anthropic.com' },
   openai: { kind: 'openai-compatible', baseURL: 'https://api.openai.com/v1' },
-  kimi: { kind: 'openai-compatible', baseURL: 'https://api.kimi.com/coding/v1' },
+  // Kimi Coding Plan endpoint speaks the Anthropic protocol and allowlists
+  // clients by SDK shape — OpenAI-compatible calls are rejected with
+  // "Kimi For Coding is currently only available for Coding Agents…".
+  // Default model id is `kimi-for-coding` (auto-routes to the latest tuned
+  // checkpoint).
+  kimi: { kind: 'anthropic', baseURL: 'https://api.kimi.com/coding/v1' },
   deepseek: { kind: 'openai-compatible', baseURL: 'https://api.deepseek.com/v1' },
   glm: {
     kind: 'openai-compatible',
@@ -42,7 +47,10 @@ export async function makeModel(
     throw new Error(`provider "${providerId}" not configured — set API key in Settings`)
   }
   if (profile.kind === 'anthropic') {
-    const anthropic = createAnthropic({ apiKey: key })
+    // Pass baseURL explicitly so providers piggybacking on the Anthropic
+    // protocol (Kimi Coding Plan, etc.) hit their own host. For real
+    // Anthropic the URL matches the SDK default and is a no-op.
+    const anthropic = createAnthropic({ apiKey: key, baseURL: profile.baseURL })
     return anthropic(modelId)
   }
   const provider = createOpenAICompatible({

@@ -32,7 +32,8 @@ describe('getProviderProfile', () => {
     const kimi = getProviderProfile('kimi')
     expect(kimi).toBeDefined()
     expect(kimi?.baseURL).toBe('https://api.kimi.com/coding/v1')
-    expect(kimi?.defaultModel).toBe('kimi-k2.5')
+    expect(kimi?.defaultModel).toBe('kimi-for-coding')
+    expect(kimi?.kind).toBe('anthropic')
   })
 
   it('returns undefined for unknown id', () => {
