@@ -43,8 +43,15 @@ export type HistoryMessage =
   | { role: 'tool'; content: ToolResultPart[] }
 
 export type AgentRunArgs = {
+  /** Fallback model spec — used when no per-phase override is set. */
   providerId: string
   modelId: string
+  /** Optional override: Plan phase uses these instead of providerId/modelId. */
+  planProviderId?: string
+  planModelId?: string
+  /** Optional override: Router + Build phase uses these instead. */
+  buildProviderId?: string
+  buildModelId?: string
   prompt: string
   scope: Scope
   /** Routing mode. 'auto' lets the Router classify; 'plan' forces the
@@ -128,8 +135,17 @@ export async function runAgent(
   runs.set(runId, controller)
   const mode: AgentMode = args.mode ?? 'auto'
 
+  // Resolve per-phase model specs. Router uses the Build model (cheap,
+  // single classifier call — and matches what the user picked for the
+  // phase that will actually run). Plan and Build fall back to the
+  // top-level providerId/modelId when no override is set.
+  const buildProviderId = args.buildProviderId ?? args.providerId
+  const buildModelId = args.buildModelId ?? args.modelId
+  const planProviderId = args.planProviderId ?? args.providerId
+  const planModelId = args.planModelId ?? args.modelId
+
   try {
-    const model = await makeModel(args.providerId, args.modelId)
+    const buildModelInstance = await makeModel(buildProviderId, buildModelId)
 
     let route: 'plan' | 'build'
     if (mode === 'build') {
@@ -137,10 +153,11 @@ export async function runAgent(
     } else if (mode === 'plan') {
       route = 'plan'
     } else {
-      // mode === 'auto' — Router decides. Untitled scope short-circuits to
-      // 'build' inside classifyIntent without an LLM call.
+      // mode === 'auto' — Router decides, using the Build model. Untitled
+      // scope short-circuits to 'build' inside classifyIntent without an
+      // LLM call.
       const decision = await classifyIntent({
-        model,
+        model: buildModelInstance,
         prompt: args.prompt,
         scope: args.scope,
         abortSignal: controller.signal
@@ -152,29 +169,27 @@ export async function runAgent(
     let plan: Plan | undefined
     if (route === 'plan') {
       onEvent({ type: 'phase-start', phase: 'plan' })
-      plan = await runPlanPhase(args, model, controller, onEvent)
-      // If plan failed (returned undefined) or was cancelled, runPlanPhase
-      // has already emitted error/finish — bail.
+      // Plan may use a different provider/model than Build. Instantiate on
+      // demand so we don't pay for a model build when route='build'.
+      const planModelInstance =
+        planProviderId === buildProviderId && planModelId === buildModelId
+          ? buildModelInstance
+          : await makeModel(planProviderId, planModelId)
+      plan = await runPlanPhase(args, planModelInstance, controller, onEvent)
       if (!plan) return
 
-      // Pause for the user to edit / approve / dismiss the plan. The
-      // renderer drives this via `agent:plan-approval-respond`. cancelRun
-      // resolves the promise as { approved: false } so we don't hang.
       onEvent({ type: 'plan-approval-request', plan })
       const response = await planApprovals.request(runId, plan)
       if (controller.signal.aborted) return
       if (!response.approved) {
-        // User dismissed the plan or run was cancelled — emit finish so the
-        // UI knows we're idle, then stop. No Build.
         onEvent({ type: 'finish' })
         return
       }
-      // Approved: use the (possibly edited) plan returned by the renderer.
       plan = response.plan
       onEvent({ type: 'phase-start', phase: 'build' })
     }
 
-    await runBuildPhase(runId, args, model, plan, controller, onEvent)
+    await runBuildPhase(runId, args, buildModelInstance, plan, controller, onEvent)
   } catch (err) {
     if (controller.signal.aborted) {
       onEvent({ type: 'error', message: 'cancelled' })

@@ -24,8 +24,25 @@ import { sanitizeItems } from '../lib/sanitizeItems'
 import { coerceUsage, sumUsage, formatTokens } from '../lib/usage'
 import { exportConversation } from '../lib/exportConversation'
 import { clampPanelWidth, PANEL_WIDTH_DEFAULT } from '../lib/panelWidth'
+import {
+  buildAvailableModels,
+  parseModelChoice,
+  serializeModelChoice,
+  type AvailableModel,
+  type ModelChoice
+} from '../lib/availableModels'
+import type {
+  AgentEvent,
+  AgentMode,
+  ApprovalPayload,
+  PlanStep,
+  RouteDecision,
+  Scope
+} from '../types'
 
 const PANEL_WIDTH_STORAGE_KEY = 'quill.agent.width'
+const PLAN_CHOICE_STORAGE_KEY = 'quill.agent.planModel'
+const BUILD_CHOICE_STORAGE_KEY = 'quill.agent.buildModel'
 
 function readStoredWidth(): number {
   try {
@@ -36,14 +53,30 @@ function readStoredWidth(): number {
     return PANEL_WIDTH_DEFAULT
   }
 }
-import type {
-  AgentEvent,
-  AgentMode,
-  ApprovalPayload,
-  PlanStep,
-  RouteDecision,
-  Scope
-} from '../types'
+
+function readStoredChoice(key: string): ModelChoice | null {
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    return parseModelChoice(raw)
+  } catch {
+    return null
+  }
+}
+
+function writeStoredChoice(key: string, choice: ModelChoice | null): void {
+  try {
+    if (choice) window.localStorage.setItem(key, serializeModelChoice(choice))
+    else window.localStorage.removeItem(key)
+  } catch {
+    /* best-effort */
+  }
+}
+
+function formatContext(tokens: number): string {
+  if (tokens >= 1_000_000) return (tokens / 1_000_000).toFixed(1) + 'M'
+  return Math.round(tokens / 1000) + 'K'
+}
 
 const WRITE_TOOL_NAMES = new Set(['write_file', 'apply_edit', 'create_file'])
 
@@ -144,26 +177,37 @@ export function AgentPanel({ onClose }: Props) {
 
   const [provider, setProvider] = useState<DefaultProvider>(null)
   const [providerError, setProviderError] = useState<string | null>(null)
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
+  // Persisted per-phase choices. null means "use the default provider".
+  const [planChoice, setPlanChoice] = useState<ModelChoice | null>(() =>
+    readStoredChoice(PLAN_CHOICE_STORAGE_KEY)
+  )
+  const [buildChoice, setBuildChoice] = useState<ModelChoice | null>(() =>
+    readStoredChoice(BUILD_CHOICE_STORAGE_KEY)
+  )
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [input, setInput] = useState('')
   const [items, setItems] = useState<Item[]>([])
   const [busy, setBusy] = useState(false)
   const [runId, setRunId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Resolve the default provider on mount + when panel re-opens.
+  // Resolve the default provider + full configured list on mount.
   useEffect(() => {
     let alive = true
     const load = async (): Promise<void> => {
-      const defId = await ipc.providers.getDefault()
+      const [defId, list] = await Promise.all([
+        ipc.providers.getDefault(),
+        ipc.providers.list()
+      ])
       if (!alive) return
+      setAvailableModels(buildAvailableModels(list))
       if (!defId) {
         setProvider(null)
         setProviderError('未设置默认 provider — 去 ⌘, 设置里配置')
         return
       }
-      const list = await ipc.providers.list()
       const meta = list.find((p) => p.id === defId)
-      if (!alive) return
       if (!meta) {
         setProvider(null)
         setProviderError(`默认 provider "${defId}" 未配置`)
@@ -177,6 +221,37 @@ export function AgentPanel({ onClose }: Props) {
       alive = false
     }
   }, [])
+
+  // Persist Plan/Build choices whenever they change. Stored values dropped
+  // by validation (below) also propagate via this effect.
+  useEffect(() => {
+    writeStoredChoice(PLAN_CHOICE_STORAGE_KEY, planChoice)
+  }, [planChoice])
+  useEffect(() => {
+    writeStoredChoice(BUILD_CHOICE_STORAGE_KEY, buildChoice)
+  }, [buildChoice])
+
+  // After availableModels loads, drop any stored choice that no longer
+  // matches a real (provider, model) pair — the provider may have been
+  // deleted in Settings, or its catalog reshuffled.
+  useEffect(() => {
+    if (availableModels.length === 0) return
+    const has = (c: ModelChoice | null): boolean =>
+      !c ||
+      availableModels.some(
+        (m) => m.providerId === c.providerId && m.modelId === c.modelId
+      )
+    if (!has(planChoice)) setPlanChoice(null)
+    if (!has(buildChoice)) setBuildChoice(null)
+  }, [availableModels, planChoice, buildChoice])
+
+  // Effective model used by each phase. Falls back to the default provider's
+  // (id, model) when no override was picked.
+  const defaultChoice: ModelChoice | null = provider
+    ? { providerId: provider.id, modelId: provider.model }
+    : null
+  const effectivePlan: ModelChoice | null = planChoice ?? defaultChoice
+  const effectiveBuild: ModelChoice | null = buildChoice ?? defaultChoice
 
   // Load persisted conversation when the scope changes (or on first mount).
   // Untitled scope is in-memory only — clear items so an old chat doesn't
@@ -427,6 +502,12 @@ export function AgentPanel({ onClose }: Props) {
         runId: newRunId,
         providerId: provider.id,
         modelId: provider.model,
+        // Per-phase overrides — main falls back to providerId/modelId when
+        // these are undefined, so omit when no user override.
+        planProviderId: planChoice?.providerId,
+        planModelId: planChoice?.modelId,
+        buildProviderId: buildChoice?.providerId,
+        buildModelId: buildChoice?.modelId,
         prompt: parsed.prompt,
         scope,
         mode: parsed.mode,
@@ -442,7 +523,7 @@ export function AgentPanel({ onClose }: Props) {
       setBusy(false)
       setRunId(null)
     }
-  }, [canRun, provider, scope, input, cur])
+  }, [canRun, provider, scope, input, cur, planChoice, buildChoice])
 
   const handleCancel = useCallback(async () => {
     if (!runId) return
@@ -716,8 +797,19 @@ export function AgentPanel({ onClose }: Props) {
         )}
       </div>
 
-      <footer className="border-t border-[var(--rule)] p-3 bg-[var(--paper)]">
-        <div className="flex items-end gap-2">
+      <footer className="border-t border-[var(--rule)] bg-[var(--paper)]">
+        <ModelPickerStrip
+          plan={effectivePlan}
+          build={effectiveBuild}
+          planIsOverride={planChoice !== null}
+          buildIsOverride={buildChoice !== null}
+          availableModels={availableModels}
+          open={pickerOpen}
+          onToggle={() => setPickerOpen((v) => !v)}
+          onSelectPlan={setPlanChoice}
+          onSelectBuild={setBuildChoice}
+        />
+        <div className="flex items-end gap-2 p-3">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1244,6 +1336,165 @@ function ToolResultView({ name, result }: { name: string; result: unknown }) {
           {full}
         </pre>
       )}
+    </div>
+  )
+}
+
+// =============================================================================
+// Model picker — compact strip + popover above the textarea
+// =============================================================================
+
+function ModelPickerStrip({
+  plan,
+  build,
+  planIsOverride,
+  buildIsOverride,
+  availableModels,
+  open,
+  onToggle,
+  onSelectPlan,
+  onSelectBuild
+}: {
+  plan: ModelChoice | null
+  build: ModelChoice | null
+  planIsOverride: boolean
+  buildIsOverride: boolean
+  availableModels: AvailableModel[]
+  open: boolean
+  onToggle: () => void
+  onSelectPlan: (c: ModelChoice | null) => void
+  onSelectBuild: (c: ModelChoice | null) => void
+}) {
+  return (
+    <div className="border-t border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <button
+        onClick={onToggle}
+        className="no-drag w-full px-3 py-1.5 flex items-center gap-2 text-[11px] text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition text-left"
+        title={open ? '收起' : '更改 Plan / Build 模型'}
+      >
+        <ModelLabel kind="Plan" choice={plan} override={planIsOverride} models={availableModels} />
+        <span className="text-[var(--ink-ghost)]">·</span>
+        <ModelLabel kind="Build" choice={build} override={buildIsOverride} models={availableModels} />
+        <span className="ml-auto text-[var(--ink-faint)]">
+          {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        </span>
+      </button>
+      {open && (
+        <ModelPickerPopover
+          plan={plan}
+          build={build}
+          availableModels={availableModels}
+          onSelectPlan={onSelectPlan}
+          onSelectBuild={onSelectBuild}
+        />
+      )}
+    </div>
+  )
+}
+
+function ModelLabel({
+  kind,
+  choice,
+  override,
+  models
+}: {
+  kind: 'Plan' | 'Build'
+  choice: ModelChoice | null
+  override: boolean
+  models: AvailableModel[]
+}) {
+  if (!choice) {
+    return (
+      <span className="flex items-center gap-1">
+        <span className="text-[var(--ink-faint)]">{kind}</span>
+        <span className="font-serif-zh italic text-[var(--ink-faint)]">—</span>
+      </span>
+    )
+  }
+  const matched = models.find(
+    (m) => m.providerId === choice.providerId && m.modelId === choice.modelId
+  )
+  return (
+    <span className="flex items-center gap-1 min-w-0">
+      <span className={override ? 'text-[var(--accent)]' : 'text-[var(--ink-faint)]'}>
+        {kind}
+      </span>
+      <span className="font-mono text-[var(--ink)] truncate">{choice.modelId}</span>
+      {matched && (
+        <span className="font-mono text-[var(--ink-faint)]">
+          {formatContext(matched.contextTokens)}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function ModelPickerPopover({
+  plan,
+  build,
+  availableModels,
+  onSelectPlan,
+  onSelectBuild
+}: {
+  plan: ModelChoice | null
+  build: ModelChoice | null
+  availableModels: AvailableModel[]
+  onSelectPlan: (c: ModelChoice | null) => void
+  onSelectBuild: (c: ModelChoice | null) => void
+}) {
+  if (availableModels.length === 0) {
+    return (
+      <div className="px-3 pb-2 text-[11px] font-serif-zh italic text-[var(--ink-faint)]">
+        没有已配置的模型 — 去 ⌘, 设置里加 provider
+      </div>
+    )
+  }
+  const value = (c: ModelChoice | null): string =>
+    c ? serializeModelChoice(c) : ''
+  const onChange =
+    (set: (c: ModelChoice | null) => void) =>
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const v = e.target.value
+      if (!v) set(null)
+      else set(parseModelChoice(v))
+    }
+  return (
+    <div className="px-3 pb-3 pt-1 space-y-2 border-t border-[var(--rule-soft)]">
+      <PickerRow label="Plan" value={value(plan)} onChange={onChange(onSelectPlan)} models={availableModels} />
+      <PickerRow label="Build" value={value(build)} onChange={onChange(onSelectBuild)} models={availableModels} />
+      <div className="font-serif-zh italic text-[10px] text-[var(--ink-faint)]">
+        留空 = 跟随设置里的默认 provider
+      </div>
+    </div>
+  )
+}
+
+function PickerRow({
+  label,
+  value,
+  onChange,
+  models
+}: {
+  label: string
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void
+  models: AvailableModel[]
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-10 shrink-0 text-[11px] text-[var(--ink-soft)]">{label}</span>
+      <select
+        value={value}
+        onChange={onChange}
+        className="flex-1 px-2 py-1 rounded-md bg-[var(--paper)] text-[12px] font-mono text-[var(--ink)] border border-[var(--rule)] focus:outline-none focus:border-[var(--accent)]/50 cursor-pointer"
+      >
+        <option value="">默认 (跟随设置)</option>
+        {models.map((m) => (
+          <option key={`${m.providerId}/${m.modelId}`} value={`${m.providerId}/${m.modelId}`}>
+            {m.providerName} · {m.modelId} · {formatContext(m.contextTokens)}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

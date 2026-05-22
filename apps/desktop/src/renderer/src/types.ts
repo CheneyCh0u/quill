@@ -62,6 +62,12 @@ export type HistoryMessage =
 export type AgentRunArgs = {
   providerId: string
   modelId: string
+  /** Optional per-phase model overrides. When omitted, the phase uses
+   *  the top-level providerId/modelId. */
+  planProviderId?: string
+  planModelId?: string
+  buildProviderId?: string
+  buildModelId?: string
   prompt: string
   scope: Scope
   mode?: AgentMode
