@@ -10,13 +10,23 @@ import {
   type ReactNode
 } from 'react'
 import type { FileNode, ViewMode } from '../types'
-import { ipc } from '../lib/ipc'
+import { ipc, switchToLocal } from '../lib/ipc'
 import { addRecent, removeRecent } from '../lib/recent'
 import { validateRenameTarget } from '../lib/rename'
 import { usePrefs } from './prefs'
 
 type Workspace = {
+  /**
+   * Where the vault lives. 'local' = filesystem path on this machine
+   * (LocalProvider); 'remote' = Quill server URL (RemoteVault). Most
+   * downstream code doesn't care which — the active vault provider in
+   * `ipc.vault` is what changes — but the title bar / recents list /
+   * agent toggle behavior wants to know.
+   */
+  kind: 'local' | 'remote'
+  /** Absolute fs path (local) OR server base URL (remote). */
   rootPath: string
+  /** Display label — last path segment for local, hostname for remote. */
   rootName: string
   tree: FileNode[]
 }
@@ -45,7 +55,13 @@ type State = {
 }
 
 type Action =
-  | { type: 'OPEN_WORKSPACE'; rootPath: string; rootName: string; tree: FileNode[] }
+  | {
+      type: 'OPEN_WORKSPACE'
+      kind: 'local' | 'remote'
+      rootPath: string
+      rootName: string
+      tree: FileNode[]
+    }
   | { type: 'CLOSE_WORKSPACE' }
   | { type: 'OPEN_FILE'; path: string; content: string; viewMode: ViewMode }
   | { type: 'NEW_FILE'; viewMode: ViewMode }
@@ -74,7 +90,12 @@ export function reducer(s: State, a: Action): State {
     case 'OPEN_WORKSPACE':
       return {
         ...s,
-        workspace: { rootPath: a.rootPath, rootName: a.rootName, tree: a.tree },
+        workspace: {
+          kind: a.kind,
+          rootPath: a.rootPath,
+          rootName: a.rootName,
+          tree: a.tree
+        },
         sidebarCollapsed: false
       }
     case 'CLOSE_WORKSPACE':
@@ -180,6 +201,9 @@ type Ctx = {
   openFolder: () => Promise<void>
   openFile: () => Promise<void>
   openFolderAt: (path: string) => Promise<void>
+  /** Open a remote workspace. Caller must have already configured
+   *  ipc.vault to a RemoteVault via switchToRemote(). */
+  openRemoteAt: (serverUrl: string) => Promise<void>
   openFileAt: (path: string) => Promise<void>
   /** Open or new-file via user gesture — prompts for new-vs-current window
    *  when something is already open. */
@@ -227,8 +251,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const openFolderAt = useCallback(async (rootPath: string) => {
     const tree = await ipc.vault.list(rootPath)
     const rootName = rootPath.split(/[/\\]/).filter(Boolean).pop() ?? rootPath
-    dispatch({ type: 'OPEN_WORKSPACE', rootPath, rootName, tree })
+    dispatch({ type: 'OPEN_WORKSPACE', kind: 'local', rootPath, rootName, tree })
     addRecent({ type: 'folder', path: rootPath, name: rootName })
+  }, [])
+
+  /**
+   * Open the server's vault root. ipc.vault must already be the
+   * RemoteVault (caller is responsible for calling switchToRemote()
+   * before this). The "rootPath" we store is the server URL itself,
+   * since the vault provider doesn't take a path — server's config
+   * pins the actual filesystem location.
+   */
+  const openRemoteAt = useCallback(async (serverUrl: string) => {
+    const tree = await ipc.vault.list('')
+    let rootName = serverUrl
+    try {
+      rootName = new URL(serverUrl).host
+    } catch {
+      /* malformed URL — just use the raw string */
+    }
+    dispatch({
+      type: 'OPEN_WORKSPACE',
+      kind: 'remote',
+      rootPath: serverUrl,
+      rootName,
+      tree
+    })
   }, [])
 
   const openFileAt = useCallback(async (path: string) => {
@@ -323,7 +371,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await openPathWithPrompt({ newFile: true })
   }, [openPathWithPrompt])
 
-  const closeWorkspace = useCallback(() => dispatch({ type: 'CLOSE_WORKSPACE' }), [])
+  const closeWorkspace = useCallback(() => {
+    // Closing a remote workspace also drops the stored URL/token and
+    // switches the active vault back to local. Local → empty is unchanged.
+    if (stateRef.current.workspace?.kind === 'remote') {
+      void ipc.remote.clear()
+      switchToLocal()
+    }
+    dispatch({ type: 'CLOSE_WORKSPACE' })
+  }, [])
 
   const setBuffer = useCallback((buffer: string) => {
     dispatch({ type: 'SET_BUFFER', buffer })
@@ -438,6 +494,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openFolder,
       openFile,
       openFolderAt,
+      openRemoteAt,
       openFileAt,
       openPathWithPrompt,
       newFile,
@@ -456,6 +513,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openFolder,
       openFile,
       openFolderAt,
+      openRemoteAt,
       openFileAt,
       openPathWithPrompt,
       newFile,

@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { loadConfig } from './config'
 import { createAuthRoutes } from './auth-routes'
 import { createVaultRoutes } from './vault'
@@ -26,6 +27,23 @@ await providersStore.load()
 await providersStore.seedFromConfig(config.ai?.providers ?? [])
 
 const app = new Hono()
+
+// CORS — open since the desktop client lives at file:// (or app://) and
+// the iOS PWA at a different origin from the server. Bearer-token auth
+// means credentials: 'include' isn't required, so '*' is safe to use:
+// requests without an Authorization header still hit 401 from
+// requireSession. If you later switch to cookie auth across origins,
+// restrict `origin` to your specific host list and set credentials:true.
+app.use(
+  '/api/*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Authorization', 'Content-Type', 'If-Match'],
+    exposeHeaders: ['ETag'],
+    maxAge: 600
+  })
+)
 
 app.get('/health', (c) => c.json({ ok: true }))
 

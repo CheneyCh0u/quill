@@ -25,13 +25,17 @@ export function createAuthRoutes(config: AuthConfig): Hono {
     const ok = await verifyPassword(parsed.data.password, config.passwordHash)
     if (!ok) return c.json({ error: 'invalid password' }, 401)
     const token = await signSession(config.sessionSecret, config.sessionTtlDays)
+    // Set the cookie for browser clients AND return the token in the body
+    // so cross-origin clients (Electron desktop renderer) can stash it
+    // and send `Authorization: Bearer <token>` on subsequent requests —
+    // SameSite=Lax cookies don't survive a file://-to-https jump.
     setCookie(c, SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: 'Lax',
       path: '/',
       maxAge: config.sessionTtlDays * 24 * 60 * 60
     })
-    return c.json({ ok: true })
+    return c.json({ ok: true, token })
   })
 
   app.post('/logout', async (c) => {

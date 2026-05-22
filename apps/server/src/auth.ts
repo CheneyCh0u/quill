@@ -45,13 +45,27 @@ export async function verifySession(
   }
 }
 
+/** Pull the bearer token out of an Authorization header, or null. */
+function extractBearer(header: string | undefined): string | null {
+  if (!header) return null
+  const m = /^Bearer\s+(.+)$/i.exec(header)
+  return m ? m[1] : null
+}
+
 /**
- * Hono middleware: rejects unauthenticated requests with 401. Attaches the
- * verified payload to context.var.session for downstream handlers.
+ * Hono middleware: rejects unauthenticated requests with 401. Accepts the
+ * session JWT via EITHER:
+ *  - the `quill-session` httpOnly cookie (web client, same-origin)
+ *  - an `Authorization: Bearer <token>` header (desktop client, cross-
+ *    origin and unable to receive SameSite=Lax cookies)
+ *
+ * The two paths use the same JWT under the hood — only the transport
+ * differs.
  */
 export function requireSession(secret: string): MiddlewareHandler {
   return async (c, next) => {
-    const token = getCookie(c, SESSION_COOKIE)
+    const token =
+      extractBearer(c.req.header('Authorization')) ?? getCookie(c, SESSION_COOKIE)
     if (!token) return c.json({ error: 'unauthenticated' }, 401)
     const session = await verifySession(secret, token)
     if (!session) return c.json({ error: 'unauthenticated' }, 401)

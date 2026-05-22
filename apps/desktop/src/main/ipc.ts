@@ -14,6 +14,13 @@ import {
   setDefaultProvider,
   getProviderKey
 } from './providers'
+import {
+  getRemoteUrl,
+  setRemoteUrl,
+  getRemoteToken,
+  setRemoteToken,
+  clearRemote
+} from './remote-store'
 import { AgentRuntime, createContextStore, type CredentialProvider } from '@quill/agent'
 import type {
   AgentEvent,
@@ -207,6 +214,21 @@ export function registerIpc(): void {
   ipcMain.handle('providers:setDefault', async (_evt, id: string | null) =>
     setDefaultProvider(id)
   )
+
+  // -------- Remote server connection -----------------------------------
+  // Renderer reads + writes the persisted remote URL + session token.
+  // Token lives in OS keychain via safeStorage; URL is plaintext (not a
+  // secret) at ~/.quill/remote.json. Login itself happens in the
+  // renderer (POST /api/auth/login) — main just persists the token after.
+  ipcMain.handle('remote:getUrl', async () => getRemoteUrl())
+  ipcMain.handle('remote:setUrl', async (_evt, url: string | null) =>
+    setRemoteUrl(url)
+  )
+  ipcMain.handle('remote:getToken', async () => getRemoteToken())
+  ipcMain.handle('remote:setToken', async (_evt, token: string | null) =>
+    setRemoteToken(token)
+  )
+  ipcMain.handle('remote:clear', async () => clearRemote())
 
   // -------- Agent runtime ----------------------------------------------
   // Renderer fires `agent:run` with a generated runId + args; main streams

@@ -1,4 +1,4 @@
-import { LocalProvider, type VaultProvider } from '@quill/vault-adapter'
+import { LocalProvider, RemoteVault, type VaultProvider } from '@quill/vault-adapter'
 import type {
   AgentEvent,
   AgentRunArgs,
@@ -9,11 +9,49 @@ import type {
   Scope
 } from '../types'
 
-// Renderer-side vault is local-by-default today. RemoteProvider takes over
-// when remote-mode is selected (planned, see docs/web-server.md).
-// Lazy-constructed via a getter so module load doesn't touch `window` —
-// keeps the module importable from bun:test where DOM globals are absent.
+/**
+ * Active vault provider. Defaults to local (LocalProvider wrapping
+ * window.quill.fs). When the user connects to a remote server via the
+ * Settings panel, switchToRemote() swaps in a RemoteVault configured
+ * with a Bearer-token auth header.
+ *
+ * Lazy-constructed via a getter so module load doesn't touch `window` —
+ * keeps the module importable from bun:test where DOM globals are absent.
+ */
 let _vault: VaultProvider | undefined
+const subscribers = new Set<() => void>()
+
+function notify(): void {
+  for (const cb of subscribers) cb()
+}
+
+export type RemoteMode = { url: string; getToken: () => Promise<string | null> }
+
+/** Subscribe to vault changes — React components can call this from a
+ *  useEffect and re-render when remote/local toggles. Returns an
+ *  unsubscribe function. */
+export function subscribeVault(cb: () => void): () => void {
+  subscribers.add(cb)
+  return () => {
+    subscribers.delete(cb)
+  }
+}
+
+export function switchToRemote(mode: RemoteMode): void {
+  _vault = new RemoteVault({
+    baseUrl: mode.url,
+    getAuthHeaders: async (): Promise<Record<string, string>> => {
+      const token = await mode.getToken()
+      return token ? { Authorization: `Bearer ${token}` } : {}
+    }
+  })
+  notify()
+}
+
+export function switchToLocal(): void {
+  _vault = new LocalProvider(window.quill.fs)
+  notify()
+}
 
 export const ipc = {
   openFolderDialog: (): Promise<string | null> => window.quill.dialog.openFolder(),
@@ -81,5 +119,13 @@ export const ipc = {
     test: (baseURL: string) => window.quill.providers.test(baseURL),
     getDefault: () => window.quill.providers.getDefault(),
     setDefault: (id: string | null) => window.quill.providers.setDefault(id)
+  },
+  remote: {
+    getUrl: (): Promise<string | null> => window.quill.remote.getUrl(),
+    setUrl: (url: string | null): Promise<void> => window.quill.remote.setUrl(url),
+    getToken: (): Promise<string | null> => window.quill.remote.getToken(),
+    setToken: (token: string | null): Promise<void> =>
+      window.quill.remote.setToken(token),
+    clear: (): Promise<void> => window.quill.remote.clear()
   }
 }

@@ -6,7 +6,9 @@ import { ThemeToggle } from './ThemeToggle'
 
 type Props = {
   agentOpen: boolean
-  onToggleAgent: () => void
+  /** Undefined when the current workspace doesn't support the local agent
+   *  (e.g. remote mode). Hides the toggle button entirely in that case. */
+  onToggleAgent: (() => void) | undefined
 }
 
 export function StatusBar({ agentOpen, onToggleAgent }: Props) {
@@ -42,18 +44,20 @@ export function StatusBar({ agentOpen, onToggleAgent }: Props) {
         </span>
       )}
       <div className="flex-1" />
-      <button
-        onClick={onToggleAgent}
-        title={agentOpen ? '关闭 Agent (⌘J)' : '打开 Agent (⌘J)'}
-        className={[
-          'no-drag p-1 rounded transition flex items-center justify-center',
-          agentOpen
-            ? 'text-[var(--accent)] bg-[var(--accent-soft)]/60'
-            : 'text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]'
-        ].join(' ')}
-      >
-        <Sparkles className="w-3.5 h-3.5" />
-      </button>
+      {onToggleAgent && (
+        <button
+          onClick={onToggleAgent}
+          title={agentOpen ? '关闭 Agent (⌘J)' : '打开 Agent (⌘J)'}
+          className={[
+            'no-drag p-1 rounded transition flex items-center justify-center',
+            agentOpen
+              ? 'text-[var(--accent)] bg-[var(--accent-soft)]/60'
+              : 'text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]'
+          ].join(' ')}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+        </button>
+      )}
       <ThemeToggle />
     </footer>
   )

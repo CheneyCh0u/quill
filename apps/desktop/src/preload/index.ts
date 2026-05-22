@@ -118,6 +118,15 @@ const api = {
     listDir: (path: string): Promise<FileNode[]> => ipcRenderer.invoke('fs:listDir', path),
     stat: (path: string): Promise<FileStat> => ipcRenderer.invoke('fs:stat', path)
   },
+  remote: {
+    getUrl: (): Promise<string | null> => ipcRenderer.invoke('remote:getUrl'),
+    setUrl: (url: string | null): Promise<void> =>
+      ipcRenderer.invoke('remote:setUrl', url),
+    getToken: (): Promise<string | null> => ipcRenderer.invoke('remote:getToken'),
+    setToken: (token: string | null): Promise<void> =>
+      ipcRenderer.invoke('remote:setToken', token),
+    clear: (): Promise<void> => ipcRenderer.invoke('remote:clear')
+  },
   exportPdf: (args: { html: string; defaultName: string }): Promise<string | null> =>
     ipcRenderer.invoke('export:pdf', args),
   shell: {

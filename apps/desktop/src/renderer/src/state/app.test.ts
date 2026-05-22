@@ -84,7 +84,7 @@ describe('REFRESH_TREE', () => {
     const newTree = [node('a.md', '/r/a.md'), node('b.md', '/r/b.md')]
     const next = reducer(
       {
-        workspace: { rootPath: '/r', rootName: 'r', tree: oldTree },
+        workspace: { kind: 'local', rootPath: '/r', rootName: 'r', tree: oldTree },
         currentFile: null,
         viewMode: 'split',
         sidebarCollapsed: false,

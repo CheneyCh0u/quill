@@ -37,33 +37,67 @@ function toFileNode(e: ServerEntry): FileNode {
   }
 }
 
+export type RemoteVaultOptions = {
+  /** Server base URL — empty string means same-origin (web client default). */
+  baseUrl?: string
+  /**
+   * Resolve auth headers to attach to every request. Sync or async.
+   * Returning {} is fine for callers that rely on cookies (`credentials:
+   * 'include'` is always set).
+   *
+   * Desktop uses this to inject `Authorization: Bearer <token>`, since
+   * its `file://` renderer origin can't receive a SameSite=Lax cookie
+   * from a remote https server.
+   */
+  getAuthHeaders?: () => Promise<Record<string, string>> | Record<string, string>
+}
+
 /**
  * VaultProvider backed by the Quill server's REST API.
  *
- * Cookie auth: `credentials: 'include'` lets the browser (or Electron
- * renderer's session) attach the `quill-session` cookie automatically.
- * The desktop app's renderer goes through the same Electron net stack as
- * regular fetch, so cookies set by a successful /api/auth/login persist
- * for subsequent vault calls without any extra wiring.
+ * Two auth transports are supported and can stack:
+ *  - Cookies (browser, same-origin): `credentials: 'include'` is always
+ *    set; the browser attaches `quill-session` automatically.
+ *  - Bearer token (desktop, cross-origin): pass `getAuthHeaders` returning
+ *    `{ Authorization: 'Bearer <token>' }`. The server's requireSession
+ *    middleware accepts either and verifies the same JWT under the hood.
  *
- * baseUrl: empty by default (same origin, the web client's setup). The
- * desktop app passes the full server URL ("https://quill.example.com").
- *
- * Sync-status methods (push/pull/syncStatus) and a local-cache layer
- * are intentionally NOT here yet — when the manual-sync UI lands, those
- * become a separate `SyncingRemoteVault` that composes this one.
+ * Sync-status methods (push/pull/syncStatus) and a local-cache layer are
+ * intentionally NOT here yet — when manual-sync UI lands, those become a
+ * separate `SyncingRemoteVault` that composes this one.
  */
 export class RemoteVault implements VaultProvider {
   readonly kind = 'remote' as const
+  private readonly baseUrl: string
+  private readonly getAuthHeaders: NonNullable<RemoteVaultOptions['getAuthHeaders']>
 
-  constructor(private readonly baseUrl: string = '') {}
+  constructor(options: RemoteVaultOptions | string = {}) {
+    // Tolerate the older positional-baseUrl signature so existing web
+    // callers (`new RemoteVault()` / `new RemoteVault('http://x')`)
+    // don't have to change.
+    const opts = typeof options === 'string' ? { baseUrl: options } : options
+    this.baseUrl = opts.baseUrl ?? ''
+    this.getAuthHeaders = opts.getAuthHeaders ?? (() => ({}))
+  }
 
   private url(path: string): string {
     return `${this.baseUrl}${path}`
   }
 
+  /** Merge caller-supplied init with the auth headers + credentials.
+   *  Headers can come in as Headers/array/record — preserve the user's
+   *  values and let auth headers override only when not already set. */
+  private async withAuth(init?: RequestInit): Promise<RequestInit> {
+    const headers = new Headers(init?.headers)
+    const auth = await this.getAuthHeaders()
+    for (const [k, v] of Object.entries(auth)) {
+      if (!headers.has(k)) headers.set(k, v)
+    }
+    return { ...init, headers, credentials: 'include' }
+  }
+
   private async call<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(this.url(path), { ...init, credentials: 'include' })
+    const res = await fetch(this.url(path), await this.withAuth(init))
     if (res.status === 401) throw new UnauthorizedError()
     if (!res.ok) {
       const body = await res.text().catch(() => '')
@@ -73,9 +107,10 @@ export class RemoteVault implements VaultProvider {
   }
 
   async read(path: string): Promise<string> {
-    const res = await fetch(this.url(`/api/vault/file/${encodeURI(path)}`), {
-      credentials: 'include'
-    })
+    const res = await fetch(
+      this.url(`/api/vault/file/${encodeURI(path)}`),
+      await this.withAuth()
+    )
     if (res.status === 401) throw new UnauthorizedError()
     if (res.status === 404) throw new Error(`file not found: ${path}`)
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)

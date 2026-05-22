@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { ipc } from '../lib/ipc'
 import { useApp } from '../state/app'
 import { getRecent } from '../lib/recent'
 import type { RecentEntry } from '../types'
+import { RemoteLoginDialog } from './RemoteLoginDialog'
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts
@@ -43,9 +45,12 @@ function ActionCard({ label, hint, shortcut, onClick }: ActionCardProps) {
 export function EmptyState() {
   const { newFile, openFolder, openFile, openFolderAt, openFileAt } = useApp()
   const [recent, setRecent] = useState<RecentEntry[]>([])
+  const [remoteOpen, setRemoteOpen] = useState(false)
+  const [lastRemoteUrl, setLastRemoteUrl] = useState<string | null>(null)
 
   useEffect(() => {
     setRecent(getRecent())
+    void ipc.remote.getUrl().then(setLastRemoteUrl)
   }, [])
 
   return (
@@ -66,7 +71,7 @@ export function EmptyState() {
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <ActionCard
             label="打开文件夹"
             hint="作为 vault 工作"
@@ -85,11 +90,24 @@ export function EmptyState() {
             shortcut="⌘N"
             onClick={newFile}
           />
+          <ActionCard
+            label="连接远程"
+            hint="自部署服务"
+            shortcut="·"
+            onClick={() => setRemoteOpen(true)}
+          />
         </div>
 
         <p className="mt-4 text-center text-xs text-[var(--ink-faint)]">
           或者把一份 .md 文件 / 文件夹拖到这里
         </p>
+
+        {remoteOpen && (
+          <RemoteLoginDialog
+            initialUrl={lastRemoteUrl ?? undefined}
+            onClose={() => setRemoteOpen(false)}
+          />
+        )}
 
         {recent.length > 0 && (
           <div className="mt-12">

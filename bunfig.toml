@@ -1,0 +1,9 @@
+# Bun install configuration.
+#
+# Pins the registry to npmjs.org so the URLs baked into bun.lock are
+# stable across machines + CI + Docker builds. Previously the lock was
+# generated against registry.npmmirror.com (Tao Bao mirror), which 5xx'd
+# intermittently and broke `bun install --frozen-lockfile` in Docker.
+
+[install]
+registry = "https://registry.npmjs.org/"
