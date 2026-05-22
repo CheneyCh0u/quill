@@ -1,20 +1,34 @@
-// Mirror of types exported from src/preload/index.ts. Keep in sync.
+// Renderer type surface.
+//
+// Cross-process types live in @quill/shared-types and are re-exported here
+// so existing `import { X } from '../types'` call-sites keep working.
+// UI-only types that never leave the renderer stay defined inline below.
 
-export type FileNode = {
-  name: string
-  path: string
-  isDirectory: boolean
-  isMarkdown: boolean
-  children?: FileNode[]
-}
+export type {
+  AgentEvent,
+  AgentMode,
+  AgentRunArgs,
+  ApprovalPayload,
+  ApprovalResponse,
+  AssistantPart,
+  CompressionRunArgs,
+  FileNode,
+  FileStat,
+  HistoryMessage,
+  MenuCommand,
+  Plan,
+  PlanApprovalResponse,
+  PlanStep,
+  RouteDecision,
+  Scope,
+  ToolCallPart,
+  ToolResultOutput,
+  ToolResultPart
+} from '@quill/shared-types'
 
-export type MenuCommand =
-  | 'new-file'
-  | 'open-file'
-  | 'open-folder'
-  | 'save'
-  | 'close-folder'
-  | 'export-pdf'
+// ============================================================
+// UI-only — never crosses IPC, lives only inside the renderer
+// ============================================================
 
 export type ViewMode = 'edit' | 'split' | 'preview'
 
@@ -26,96 +40,4 @@ export type RecentEntry = {
   path: string
   name: string
   openedAt: number
-}
-
-export type Scope =
-  | { kind: 'workspace'; root: string }
-  | { kind: 'single-file'; path: string }
-  | { kind: 'untitled' }
-
-// Subset of ai-sdk v6's ModelMessage we serialize across IPC. Mirror only —
-// the canonical shape lives in renderer/lib/itemsToMessages.ts (Message type)
-// and the runtime layer in main accepts it structurally.
-export type ToolCallPart = {
-  type: 'tool-call'
-  toolCallId: string
-  toolName: string
-  input: unknown
-}
-export type ToolResultOutput =
-  | { type: 'json'; value: unknown }
-  | { type: 'error-json'; value: unknown }
-  | { type: 'execution-denied'; reason?: string }
-export type ToolResultPart = {
-  type: 'tool-result'
-  toolCallId: string
-  toolName: string
-  output: ToolResultOutput
-}
-export type AssistantPart = { type: 'text'; text: string } | ToolCallPart
-
-export type HistoryMessage =
-  | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string | AssistantPart[] }
-  | { role: 'tool'; content: ToolResultPart[] }
-
-export type AgentRunArgs = {
-  providerId: string
-  modelId: string
-  /** Optional per-phase model overrides. When omitted, the phase uses
-   *  the top-level providerId/modelId. */
-  planProviderId?: string
-  planModelId?: string
-  buildProviderId?: string
-  buildModelId?: string
-  prompt: string
-  scope: Scope
-  mode?: AgentMode
-  history?: HistoryMessage[]
-  currentBuffer?: string
-  currentSelection?: string
-}
-
-export type ApprovalPayload = Record<string, unknown>
-export type ApprovalResponse = { approved: boolean; reason?: string }
-export type PlanApprovalResponse =
-  | { approved: true; plan: Plan }
-  | { approved: false }
-
-export type AgentMode = 'auto' | 'plan' | 'build'
-
-export type RouteDecision = { agent: 'plan' | 'build'; reason: string }
-export type PlanStep = {
-  id: string
-  title: string
-  why?: string
-  files?: string[]
-}
-export type Plan = { steps: PlanStep[] }
-
-export type AgentEvent =
-  | { type: 'text-delta'; delta: string }
-  | { type: 'tool-call'; toolCallId: string; name: string; args: unknown }
-  | { type: 'tool-result'; toolCallId: string; name: string; result: unknown }
-  | { type: 'tool-approval-request'; toolCallId: string; payload: ApprovalPayload }
-  | { type: 'route-decision'; decision: RouteDecision }
-  | { type: 'phase-start'; phase: 'plan' | 'build' }
-  | { type: 'plan-delta'; partial: Partial<Plan> }
-  | { type: 'plan-complete'; plan: Plan }
-  | { type: 'plan-usage'; usage: unknown }
-  | { type: 'plan-approval-request'; plan: Plan }
-  | { type: 'compression-start' }
-  | { type: 'compression-complete'; summary: string; originalCount: number }
-  | { type: 'compression-error'; message: string }
-  | { type: 'step-finish'; usage?: unknown }
-  | { type: 'finish'; usage?: unknown; finishReason?: string }
-  | { type: 'error'; message: string }
-
-export type CompressionRunArgs = {
-  providerId: string
-  modelId: string
-  messages: HistoryMessage[]
-  originalCount: number
-  lastInputTokens?: number
-  contextTokens?: number
 }
