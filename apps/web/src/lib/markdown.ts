@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
+import { slugify } from './outline'
 
 function escapeHtml(s: string): string {
   return s
@@ -25,6 +26,28 @@ const md: MarkdownIt = new MarkdownIt({
   }
 })
 
+// Inject id="<slug>" onto every heading so the outline panel's
+// click-to-scroll target exists in the DOM. Disambiguates duplicates the
+// same way buildOutline() does — keeps both sides aligned without a
+// shared data structure.
+md.renderer.rules.heading_open = (tokens, idx) => {
+  const open = tokens[idx]
+  const inline = tokens[idx + 1]
+  const text = inline?.type === 'inline' ? (inline.content ?? '').trim() : ''
+  const base = slugify(text) || `h-${idx}`
+  // markdown-it re-renders for each call; carry a counter on the renderer
+  // env or fall back to per-call counts via env. We use env directly so a
+  // single render() pass disambiguates.
+  const env = (tokens as unknown as { env?: { slugCounts?: Map<string, number> } }).env
+  if (env && !env.slugCounts) env.slugCounts = new Map()
+  const counts: Map<string, number> = env?.slugCounts ?? new Map()
+  const seen = counts.get(base) ?? 0
+  const slug = seen === 0 ? base : `${base}-${seen + 1}`
+  counts.set(base, seen + 1)
+  return `<${open.tag} id="${slug}">`
+}
+
 export function renderMarkdown(src: string): string {
-  return md.render(src)
+  // env is per-render so duplicate-slug counters reset between calls.
+  return md.render(src, { slugCounts: new Map<string, number>() })
 }

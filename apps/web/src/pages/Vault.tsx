@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { FileNode, Scope } from '@quill/shared-types'
 import { AgentPanel } from '../components/AgentPanel'
+import { DownloadMenu } from '../components/DownloadMenu'
 import { Editor } from '../components/Editor'
 import { FileTree, type FileTreeHandle } from '../components/FileTree'
 import { ModeSwitcher, type ViewMode } from '../components/ModeSwitcher'
+import { Outline, OutlineSheetButton } from '../components/Outline'
 import { Preview } from '../components/Preview'
 import { RemoteVault, UnauthorizedError } from '@quill/vault-adapter'
 import { logout } from '../lib/auth'
@@ -26,6 +28,10 @@ export function Vault(): JSX.Element {
   const [save, setSave] = useState<SaveStatus>('idle')
   const [aiOpen, setAiOpen] = useState(false)
   const fileTreeRef = useRef<FileTreeHandle | null>(null)
+  // Preview's scroll container — Outline targets this when scrolling to
+  // a heading, so heading lookups stay scoped (no false matches on the
+  // rest of the page).
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
 
   // The server overrides scope.root with its configured vault path. We
   // send a placeholder so the protocol's required field is satisfied.
@@ -238,6 +244,10 @@ export function Vault(): JSX.Element {
             <>
               <SaveStatusIndicator status={save} dirty={dirty} onSave={handleSave} />
               <ModeSwitcher value={mode} onChange={setMode} />
+              {mode === 'preview' && (
+                <OutlineSheetButton source={buffer} containerRef={previewScrollRef} />
+              )}
+              <DownloadMenu filePath={selected.path} content={buffer} />
             </>
           )}
           <button
@@ -262,21 +272,34 @@ export function Vault(): JSX.Element {
             ⚙
           </Link>
         </header>
-        <div className="flex-1 overflow-y-auto scroll-thin">
-          {loadErr && (
-            <div className="px-6 py-4 text-sm text-[var(--accent)]">{loadErr}</div>
-          )}
-          {!selected && !loadErr && (
-            <div className="flex items-center justify-center h-full text-sm text-[var(--ink-faint)]">
-              在左侧选择一个 markdown 文件
+        <div className="flex-1 flex min-h-0">
+          <div
+            ref={previewScrollRef}
+            className="flex-1 overflow-y-auto scroll-thin min-w-0"
+          >
+            {loadErr && (
+              <div className="px-6 py-4 text-sm text-[var(--accent)]">{loadErr}</div>
+            )}
+            {!selected && !loadErr && (
+              <div className="flex items-center justify-center h-full text-sm text-[var(--ink-faint)]">
+                在左侧选择一个 markdown 文件
+              </div>
+            )}
+            {selected && !loadErr && (
+              mode === 'edit' ? (
+                <Editor value={buffer} onChange={setBuffer} onSave={handleSave} />
+              ) : (
+                <Preview source={buffer} />
+              )
+            )}
+          </div>
+          {/* Side outline rail — md+ only, only in preview mode (the
+              editor view doesn't have stable heading anchors to scroll
+              to). Hides itself when the document has no headings. */}
+          {selected && !loadErr && mode === 'preview' && (
+            <div className="hidden md:block w-48 shrink-0">
+              <Outline source={buffer} containerRef={previewScrollRef} />
             </div>
-          )}
-          {selected && !loadErr && (
-            mode === 'edit' ? (
-              <Editor value={buffer} onChange={setBuffer} onSave={handleSave} />
-            ) : (
-              <Preview source={buffer} />
-            )
           )}
         </div>
       </main>
