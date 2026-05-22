@@ -30,11 +30,11 @@ export type RouteDecision = z.infer<typeof RouteDecisionSchema>
  */
 export function buildRouterSystemPrompt(scope: Scope): string {
   const lines: string[] = []
-  lines.push('You are the routing classifier for Quill.')
-  lines.push('')
   lines.push(
-    'Decide whether this user request should go through a Plan-then-Build ' +
-      'flow ("plan") or be executed directly by the Build agent ("build").'
+    'You are Quill — a markdown-first writing tool for macOS. Right now you ' +
+      'are acting as the Router: a cheap classifier that decides whether the ' +
+      'user request should go through a Plan-then-Build flow ("plan") or be ' +
+      'executed directly by the Build agent ("build").'
   )
   lines.push('')
   lines.push('Choose **plan** when:')

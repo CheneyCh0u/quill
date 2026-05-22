@@ -36,12 +36,15 @@ export type Plan = z.infer<typeof PlanSchema>
  */
 export function buildPlanSystemPrompt(scope: Scope, currentBuffer?: string): string {
   const lines: string[] = []
-  lines.push('You are the Plan agent for Quill.')
+  lines.push(
+    'You are Quill — a markdown-first writing tool for macOS. Right now you ' +
+      'are acting as the Plan agent: you turn a user request into a short ' +
+      'ordered plan for the Build agent to execute next.'
+  )
   lines.push('')
   lines.push(
-    'Your job: turn a user request into a short ordered plan that a separate ' +
-      'Build agent will execute. You have no tools. Do not call read_file or ' +
-      'any other tool — output the plan only.'
+    'You have no tools. Do not call read_file or any other tool — output the ' +
+      'plan only. Build will get your steps verbatim and follow them.'
   )
   lines.push('')
   lines.push('Keep plans tight (2–8 steps for most tasks). Each step must be:')
