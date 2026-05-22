@@ -5,29 +5,72 @@ import { getProviderKey } from '../providers'
 
 type ProviderKind = 'anthropic' | 'openai-compatible'
 
+type ProviderProfile = {
+  kind: ProviderKind
+  baseURL: string
+  /** Preset model ids the renderer dropdown offers. Empty array = provider
+   *  isn't yet open to users (no models in the catalog). */
+  models: string[]
+  /** Default model id to snap stored configs to when their stored model
+   *  no longer appears in `models` (e.g. renames, removals). Empty string
+   *  when the provider has no models yet. */
+  defaultModelId: string
+}
+
 /**
- * Minimal mirror of `renderer/src/lib/providers.ts` PROVIDERS — just enough
- * for the model factory. Keep in sync with the renderer registry; renderer is
- * the source of truth for display name / docs URL / default model.
+ * Minimal mirror of `renderer/src/lib/providers.ts` PROVIDERS. Keep in sync
+ * with the renderer registry; renderer is the source of truth for display
+ * name / docs URL / context window sizes. Main only needs the data required
+ * to (a) build an ai-sdk model and (b) migrate stored configs with stale
+ * model ids.
  */
-const PROFILES: Record<string, { kind: ProviderKind; baseURL: string }> = {
-  anthropic: { kind: 'anthropic', baseURL: 'https://api.anthropic.com' },
-  openai: { kind: 'openai-compatible', baseURL: 'https://api.openai.com/v1' },
+const PROFILES: Record<string, ProviderProfile> = {
+  anthropic: { kind: 'anthropic', baseURL: 'https://api.anthropic.com', models: [], defaultModelId: '' },
+  openai: {
+    kind: 'openai-compatible',
+    baseURL: 'https://api.openai.com/v1',
+    models: [],
+    defaultModelId: ''
+  },
   // Kimi Coding Plan endpoint speaks the Anthropic protocol and allowlists
   // clients by SDK shape — OpenAI-compatible calls are rejected with
   // "Kimi For Coding is currently only available for Coding Agents…".
-  // Default model id is `kimi-for-coding` (auto-routes to the latest tuned
-  // checkpoint).
-  kimi: { kind: 'anthropic', baseURL: 'https://api.kimi.com/coding/v1' },
-  deepseek: { kind: 'openai-compatible', baseURL: 'https://api.deepseek.com/v1' },
+  kimi: {
+    kind: 'anthropic',
+    baseURL: 'https://api.kimi.com/coding/v1',
+    models: ['kimi-k2-thinking', 'k2p6', 'k2p5', 'kimi-k2.5'],
+    defaultModelId: 'kimi-k2-thinking'
+  },
+  deepseek: {
+    kind: 'openai-compatible',
+    baseURL: 'https://api.deepseek.com/v1',
+    models: [],
+    defaultModelId: ''
+  },
   glm: {
     kind: 'openai-compatible',
-    baseURL: 'https://open.bigmodel.cn/api/paas/v4/'
+    baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
+    models: [],
+    defaultModelId: ''
   },
   qwen: {
     kind: 'openai-compatible',
-    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    models: [],
+    defaultModelId: ''
   }
+}
+
+/**
+ * Returns the preset model id a stored config should be snapped to when
+ * its current `model` is no longer in the catalog, or null when no
+ * migration is needed (model still valid or provider has no catalog yet).
+ */
+export function migrateModelId(providerId: string, storedModel: string): string | null {
+  const profile = PROFILES[providerId]
+  if (!profile || profile.models.length === 0) return null
+  if (profile.models.includes(storedModel)) return null
+  return profile.defaultModelId
 }
 
 /**

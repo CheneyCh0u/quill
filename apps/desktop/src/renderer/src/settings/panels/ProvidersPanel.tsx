@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ExternalLink, Loader2, Trash2 } from 'lucide-react'
 import { ipc } from '../../lib/ipc'
 import {
@@ -7,6 +7,12 @@ import {
   type ProviderProfile,
   type ProviderId
 } from '../../lib/providers'
+
+/** Compact context display: 262144 → "262K", 1_000_000 → "1.0M". */
+function formatContext(tokens: number): string {
+  if (tokens >= 1_000_000) return (tokens / 1_000_000).toFixed(1) + 'M'
+  return Math.round(tokens / 1000) + 'K'
+}
 
 type StoredMeta = {
   id: string
@@ -42,6 +48,12 @@ export function ProvidersPanel() {
   }, [reload])
 
   const configuredMap = new Map(configured.map((c) => [c.id, c]))
+  // Hide providers with no curated models — they're stubs waiting for
+  // their model tables to be filled in. Avoids showing dead entries.
+  const visibleProviders = useMemo(
+    () => PROVIDERS.filter((p) => p.models.length > 0),
+    []
+  )
 
   return (
     <div className="max-w-[640px]">
@@ -59,7 +71,12 @@ export function ProvidersPanel() {
         <div className="text-[var(--ink-faint)] text-sm">加载中…</div>
       ) : (
         <ul className="space-y-1">
-          {PROVIDERS.map((p) => {
+          {visibleProviders.length === 0 && (
+            <li className="font-serif-zh italic text-[12px] text-[var(--ink-faint)] py-4">
+              暂无可配置的 provider
+            </li>
+          )}
+          {visibleProviders.map((p) => {
             const meta = configuredMap.get(p.id)
             const isDefault = defaultId === p.id
             return (
@@ -94,7 +111,7 @@ export function ProvidersPanel() {
                     )}
                   </div>
                   <div className="font-mono text-[11px] text-[var(--ink-faint)] truncate mt-0.5">
-                    {meta ? meta.model : `默认 ${p.defaultModel}`} · {p.baseURL}
+                    {meta ? meta.model : `默认 ${p.defaultModelId}`} · {p.baseURL}
                   </div>
                 </div>
                 <button
@@ -151,7 +168,13 @@ function ProviderModal({
 }: ModalProps) {
   const editing = !!existingMeta
   const [key, setKey] = useState('')
-  const [model, setModel] = useState(existingMeta?.model ?? provider.defaultModel)
+  // If stored model isn't in the current preset list (legacy / removed),
+  // snap to the provider's default so the dropdown has a valid selection.
+  const initialModel =
+    existingMeta?.model && provider.models.some((m) => m.id === existingMeta.model)
+      ? existingMeta.model
+      : provider.defaultModelId
+  const [model, setModel] = useState(initialModel)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'save' | 'test' | 'remove' | null>(null)
   const [testResult, setTestResult] = useState<{ ok: boolean; status?: number; error?: string } | null>(
@@ -283,16 +306,20 @@ function ProviderModal({
           </Field>
 
           <Field label="Model">
-            <input
-              type="text"
+            <select
               value={model}
               onChange={(e) => {
                 setModel(e.target.value)
                 if (error) setError(null)
               }}
-              placeholder={provider.defaultModel}
-              className="w-full px-3 py-1.5 rounded-md bg-[var(--paper)] text-[13px] font-mono text-[var(--ink)] border border-[var(--rule)] focus:outline-none focus:border-[var(--accent)]/50"
-            />
+              className="w-full px-3 py-1.5 rounded-md bg-[var(--paper)] text-[13px] font-mono text-[var(--ink)] border border-[var(--rule)] focus:outline-none focus:border-[var(--accent)]/50 cursor-pointer"
+            >
+              {provider.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label ?? m.id} · {formatContext(m.contextTokens)}
+                </option>
+              ))}
+            </select>
           </Field>
 
           {error && (

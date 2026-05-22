@@ -2,6 +2,7 @@ import { safeStorage } from 'electron'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { migrateModelId } from './agent/providers'
 
 /**
  * Storage layout under ~/.quill/:
@@ -53,7 +54,25 @@ export async function listProviders(): Promise<StoredProviderMeta[]> {
     if (!f.endsWith('.json')) continue
     try {
       const raw = await fs.readFile(join(PROVIDERS_DIR, f), 'utf-8')
-      metas.push(JSON.parse(raw))
+      const meta = JSON.parse(raw) as StoredProviderMeta
+      // Migration: stored model may be from an older catalog (e.g. a
+      // model id we no longer present). Snap to the provider's default
+      // and re-persist so the renderer doesn't ever see stale data.
+      const snapTo = migrateModelId(meta.id, meta.model)
+      if (snapTo) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[providers] migrating stored ${meta.id} model: ${meta.model} → ${snapTo}`
+        )
+        meta.model = snapTo
+        meta.updatedAt = Date.now()
+        await fs
+          .writeFile(join(PROVIDERS_DIR, f), JSON.stringify(meta, null, 2), 'utf-8')
+          .catch(() => {
+            /* best-effort — next load will retry */
+          })
+      }
+      metas.push(meta)
     } catch {
       // skip corrupt entry rather than fail the whole list
     }
