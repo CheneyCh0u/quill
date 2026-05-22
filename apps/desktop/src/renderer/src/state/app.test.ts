@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'bun:test'
 import { reducer } from './app'
+import type { FileNode } from '../types'
 
 const baseFile = { path: '/r/a.md', content: 'old', buffer: 'old' }
+
+const node = (name: string, path: string, isDir = false): FileNode => ({
+  name,
+  path,
+  isDirectory: isDir,
+  isMarkdown: !isDir && name.endsWith('.md')
+})
 
 describe('RELOAD_CURRENT_FILE', () => {
   it('replaces content and buffer when the path matches and buffer is clean', () => {
@@ -65,6 +73,41 @@ describe('RELOAD_CURRENT_FILE', () => {
       type: 'RELOAD_CURRENT_FILE',
       path: '/r/a.md',
       content: 'whatever'
+    })
+    expect(next).toEqual(before)
+  })
+})
+
+describe('REFRESH_TREE', () => {
+  it('replaces the workspace tree, preserving root + name', () => {
+    const oldTree = [node('a.md', '/r/a.md')]
+    const newTree = [node('a.md', '/r/a.md'), node('b.md', '/r/b.md')]
+    const next = reducer(
+      {
+        workspace: { rootPath: '/r', rootName: 'r', tree: oldTree },
+        currentFile: null,
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      },
+      { type: 'REFRESH_TREE', tree: newTree }
+    )
+    expect(next.workspace?.tree).toEqual(newTree)
+    expect(next.workspace?.rootPath).toBe('/r')
+    expect(next.workspace?.rootName).toBe('r')
+  })
+
+  it('is a no-op when no workspace is open', () => {
+    const before = {
+      workspace: null,
+      currentFile: null,
+      viewMode: 'split' as const,
+      sidebarCollapsed: false,
+      saving: false
+    }
+    const next = reducer(before, {
+      type: 'REFRESH_TREE',
+      tree: [node('a.md', '/r/a.md')]
     })
     expect(next).toEqual(before)
   })

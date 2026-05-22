@@ -165,7 +165,7 @@ function scopeLabel(scope: Scope | null): string {
 }
 
 export function AgentPanel({ onClose }: Props) {
-  const { state, reloadCurrentFile } = useApp()
+  const { state, reloadCurrentFile, reloadWorkspaceTree } = useApp()
   const cur = state.currentFile
   // Snapshot the current file path through a ref so the event handler closure
   // (set once on mount) always reads the latest value without re-subscribing.
@@ -362,8 +362,13 @@ export function AgentPanel({ onClose }: Props) {
           // the change is visible. Done outside the setItems reducer to keep
           // the reducer pure.
           const wr = event.result as { ok?: boolean; path?: string } | undefined
-          if (wr?.ok === true && wr.path && wr.path === curPathRef.current) {
-            void reloadCurrentFile(wr.path)
+          if (wr?.ok === true && wr.path) {
+            if (wr.path === curPathRef.current) {
+              void reloadCurrentFile(wr.path)
+            }
+            // Also refresh the workspace tree so a `create_file` shows up in
+            // the sidebar immediately. No-op outside workspace mode.
+            void reloadWorkspaceTree()
           }
           const idx = prev.findIndex(
             (it) => it.kind === 'approval' && it.toolCallId === event.toolCallId

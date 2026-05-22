@@ -45,6 +45,7 @@ type Action =
   | { type: 'END_SAVE'; path: string; content: string }
   | { type: 'SAVE_FAILED' }
   | { type: 'RELOAD_CURRENT_FILE'; path: string; content: string }
+  | { type: 'REFRESH_TREE'; tree: FileNode[] }
   | { type: 'RENAME_FILE'; oldPath: string; newPath: string; newName: string }
   | { type: 'SET_VIEW_MODE'; mode: ViewMode }
   | { type: 'TOGGLE_SIDEBAR' }
@@ -100,6 +101,11 @@ export function reducer(s: State, a: Action): State {
       }
     case 'SAVE_FAILED':
       return { ...s, saving: false }
+    case 'REFRESH_TREE':
+      // No-op outside workspace mode — an open single file doesn't have
+      // a tree to refresh.
+      if (!s.workspace) return s
+      return { ...s, workspace: { ...s.workspace, tree: a.tree } }
     case 'RELOAD_CURRENT_FILE': {
       // Triggered when something outside the editor (currently: the agent's
       // write tools) modifies the open file on disk. We always sync `content`
@@ -186,6 +192,10 @@ type Ctx = {
    *  while it's open. Path-guarded so a stale event after a window switch
    *  doesn't clobber a different file. */
   reloadCurrentFile: (path: string) => Promise<void>
+  /** Re-scan the workspace folder and refresh the sidebar tree. Triggered
+   *  after the agent creates / writes files so newly-created entries appear
+   *  immediately. No-op outside workspace mode. */
+  reloadWorkspaceTree: () => Promise<void>
 }
 
 const AppContext = createContext<Ctx | null>(null)
@@ -325,6 +335,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'RELOAD_CURRENT_FILE', path, content })
   }, [])
 
+  const reloadWorkspaceTree = useCallback(async () => {
+    // Snapshot the workspace root at call time. If the user closes the
+    // workspace mid-IO we skip the dispatch — reducer would no-op anyway,
+    // but this avoids a wasted listDir on a still-mounted tree.
+    const ws = stateRef.current.workspace
+    if (!ws) return
+    const rootAtCall = ws.rootPath
+    const tree = await ipc.listDir(rootAtCall)
+    if (stateRef.current.workspace?.rootPath !== rootAtCall) return
+    dispatch({ type: 'REFRESH_TREE', tree })
+  }, [])
+
   const renameCurrentFile = useCallback(async (newName: string) => {
     const cur = stateRef.current.currentFile
     if (!cur?.path) throw new Error('未保存的文件不能重命名')
@@ -388,7 +410,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setViewMode,
       toggleSidebar,
       renameCurrentFile,
-      reloadCurrentFile
+      reloadCurrentFile,
+      reloadWorkspaceTree
     }),
     [
       state,
@@ -404,7 +427,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setViewMode,
       toggleSidebar,
       renameCurrentFile,
-      reloadCurrentFile
+      reloadCurrentFile,
+      reloadWorkspaceTree
     ]
   )
 
