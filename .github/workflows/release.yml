@@ -82,9 +82,11 @@ jobs:
           fail_on_unmatched_files: true
           # electron-builder.yml sets `directories.output: release/${version}`,
           # so the .dmg lands under apps/desktop/release/0.0.2/ etc. — use a
-          # recursive glob so the path doesn't break every time version bumps.
+          # recursive glob so the path doesn't break when version bumps.
+          # No .dmg.blockmap because dmg.writeUpdateInfo is false (we don't
+          # ship auto-updates yet) and matching an empty glob would fail
+          # the upload step under fail_on_unmatched_files.
           files: |
             apps/desktop/release/**/*.dmg
-            apps/desktop/release/**/*.dmg.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
