@@ -87,6 +87,7 @@ export type AgentEvent =
   | { type: 'phase-start'; phase: 'plan' | 'build' }
   | { type: 'plan-delta'; partial: Partial<Plan> }
   | { type: 'plan-complete'; plan: Plan }
+  | { type: 'plan-usage'; usage: unknown }
   | { type: 'step-finish'; usage?: unknown }
   | { type: 'finish'; usage?: unknown; finishReason?: string }
   | { type: 'error'; message: string }
