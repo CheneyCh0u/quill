@@ -163,6 +163,16 @@ body {
   font-family: inherit;
 }
 
+/* When line numbers are off, the gutter (which normally provides the
+ * editor's left breathing room) is gone — content would sit flush
+ * against the pane's left edge. Re-add the spacing via padding on the
+ * content area itself, scoped to "no gutter present" with :has() so
+ * the gutter-on layout (where text sits naturally beside numbers) is
+ * untouched. */
+.cm-editor .cm-scroller:not(:has(.cm-gutters)) .cm-content {
+  padding-left: 24px;
+}
+
 .cm-editor .cm-activeLine {
   background-color: color-mix(in oklch, var(--ink) 3%, transparent) !important;
 }
