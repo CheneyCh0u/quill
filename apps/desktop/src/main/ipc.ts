@@ -1,7 +1,7 @@
 import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { extname, join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { createWindow, openSettingsWindow, type InitialAction } from './windows'
 import {
@@ -19,8 +19,13 @@ import {
   respondApproval,
   type AgentRunArgs,
   type AgentEvent,
-  type ApprovalResponse
+  type ApprovalResponse,
+  type Scope
 } from './agent'
+import { createContextStore } from './agent/context'
+
+const CONTEXTS_DIR = join(homedir(), '.quill', 'contexts')
+const contextStore = createContextStore(CONTEXTS_DIR)
 
 export type FileNode = {
   name: string
@@ -212,6 +217,14 @@ export function registerIpc(): void {
     }
   )
   ipcMain.handle('agent:cancel', async (_evt, runId: string) => cancelRun(runId))
+
+  ipcMain.handle('context:load', async (_evt, scope: Scope) => contextStore.load(scope))
+  ipcMain.handle(
+    'context:save',
+    async (_evt, args: { scope: Scope; items: unknown[] }) =>
+      contextStore.save(args.scope, args.items)
+  )
+  ipcMain.handle('context:clear', async (_evt, scope: Scope) => contextStore.clear(scope))
   ipcMain.handle(
     'agent:approval-respond',
     async (

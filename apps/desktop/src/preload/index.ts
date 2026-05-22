@@ -28,12 +28,17 @@ export type Scope =
   | { kind: 'single-file'; path: string }
   | { kind: 'untitled' }
 
+export type HistoryMessage =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string }
+
 export type AgentRunArgs = {
   providerId: string
   modelId: string
   prompt: string
   scope: Scope
   mode?: AgentMode
+  history?: HistoryMessage[]
   currentBuffer?: string
   currentSelection?: string
 }
@@ -109,6 +114,15 @@ const api = {
         ipcRenderer.off('agent:event', handler)
       }
     }
+  },
+  context: {
+    load: (
+      scope: Scope
+    ): Promise<{ version: 1; scope: Scope; items: unknown[]; updatedAt: number } | null> =>
+      ipcRenderer.invoke('context:load', scope),
+    save: (args: { scope: Scope; items: unknown[] }): Promise<void> =>
+      ipcRenderer.invoke('context:save', args),
+    clear: (scope: Scope): Promise<void> => ipcRenderer.invoke('context:clear', scope)
   },
   providers: {
     list: (): Promise<Array<{ id: string; model: string; addedAt: number; updatedAt: number }>> =>

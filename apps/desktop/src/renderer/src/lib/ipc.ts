@@ -3,7 +3,8 @@ import type {
   AgentRunArgs,
   ApprovalResponse,
   FileNode,
-  MenuCommand
+  MenuCommand,
+  Scope
 } from '../types'
 
 export const ipc = {
@@ -52,6 +53,11 @@ export const ipc = {
     }): Promise<boolean> => window.quill.agent.respondApproval(args),
     onEvent: (cb: (payload: { runId: string; event: AgentEvent }) => void) =>
       window.quill.agent.onEvent(cb)
+  },
+  context: {
+    load: (scope: Scope) => window.quill.context.load(scope),
+    save: (args: { scope: Scope; items: unknown[] }) => window.quill.context.save(args),
+    clear: (scope: Scope) => window.quill.context.clear(scope)
   },
   providers: {
     list: () => window.quill.providers.list(),

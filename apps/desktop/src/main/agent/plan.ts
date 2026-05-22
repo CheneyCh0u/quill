@@ -86,10 +86,15 @@ export function buildPlanSystemPrompt(scope: Scope, currentBuffer?: string): str
   return lines.join('\n')
 }
 
+export type PlanHistoryMessage =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string }
+
 export type PlanRunArgs = {
   model: LanguageModel
   prompt: string
   scope: Scope
+  history?: PlanHistoryMessage[]
   currentBuffer?: string
   abortSignal?: AbortSignal
 }
@@ -111,7 +116,7 @@ export function streamPlan(args: PlanRunArgs): PlanStreamResult {
     model: args.model,
     schema: PlanSchema,
     system: buildPlanSystemPrompt(args.scope, args.currentBuffer),
-    messages: [{ role: 'user', content: args.prompt }],
+    messages: [...(args.history ?? []), { role: 'user', content: args.prompt }],
     abortSignal: args.abortSignal
   })
   return {

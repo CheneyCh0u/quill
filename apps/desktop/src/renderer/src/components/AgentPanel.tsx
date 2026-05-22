@@ -18,6 +18,8 @@ import {
 import { useApp } from '../state/app'
 import { ipc } from '../lib/ipc'
 import { render as renderMd } from '../lib/markdown'
+import { itemsToMessages, type ConvItem } from '../lib/itemsToMessages'
+import { sanitizeItems } from '../lib/sanitizeItems'
 import type {
   AgentEvent,
   AgentMode,
@@ -63,6 +65,7 @@ type Item =
   | { kind: 'route'; decision: RouteDecision }
   | { kind: 'plan'; steps: PlanStep[]; status: 'streaming' | 'complete' }
   | { kind: 'phase-divider'; phase: 'plan' | 'build' }
+  | { kind: 'truncated'; count: number }
   | { kind: 'error'; message: string }
   | { kind: 'finish'; usage?: unknown }
 
@@ -105,6 +108,15 @@ export function AgentPanel({ onClose }: Props) {
     [state.workspace?.rootPath, cur]
   )
 
+  // Stable string id of the current scope — used as the dependency for the
+  // load effect so we don't refetch on every buffer change.
+  const scopeId = useMemo<string | null>(() => {
+    if (!scope) return null
+    if (scope.kind === 'workspace') return `w:${scope.root}`
+    if (scope.kind === 'single-file') return `f:${scope.path}`
+    return 'u'
+  }, [scope])
+
   const [provider, setProvider] = useState<DefaultProvider>(null)
   const [providerError, setProviderError] = useState<string | null>(null)
   const [input, setInput] = useState('')
@@ -140,6 +152,38 @@ export function AgentPanel({ onClose }: Props) {
       alive = false
     }
   }, [])
+
+  // Load persisted conversation when the scope changes (or on first mount).
+  // Untitled scope is in-memory only — clear items so an old chat doesn't
+  // bleed into a fresh untitled file.
+  useEffect(() => {
+    let alive = true
+    const load = async (): Promise<void> => {
+      if (!scope) {
+        setItems([])
+        return
+      }
+      if (scope.kind === 'untitled') {
+        setItems([])
+        return
+      }
+      const persisted = await ipc.context.load(scope)
+      if (!alive) return
+      if (!persisted || !Array.isArray(persisted.items)) {
+        setItems([])
+        return
+      }
+      // sanitize: any in-flight statuses left over from a crashed session
+      // get normalized so the panel doesn't render pending approvals or
+      // streaming plans that can never resolve.
+      const cleaned = sanitizeItems(persisted.items as ConvItem[]) as unknown as Item[]
+      setItems(cleaned)
+    }
+    void load()
+    return () => {
+      alive = false
+    }
+  }, [scopeId, scope])
 
   // Subscribe once to agent events; filter by current runId in handler.
   useEffect(() => {
@@ -285,6 +329,19 @@ export function AgentPanel({ onClose }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [items])
 
+  // Debounced persistence: 400ms after the last items[] mutation, flush to
+  // disk. Cheap because items[] only changes on agent events / user clicks
+  // (not on input typing), so we're not thrashing the FS. Untitled scope is
+  // memory-only.
+  useEffect(() => {
+    if (!scope || scope.kind === 'untitled') return
+    if (items.length === 0) return // empty items = either fresh start or post-clear; nothing to write
+    const t = window.setTimeout(() => {
+      void ipc.context.save({ scope, items: items as unknown as unknown[] })
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [items, scope])
+
   const canRun = !!scope && !!provider && !busy && input.trim().length > 0
   const canCancel = busy && runId !== null
 
@@ -305,6 +362,11 @@ export function AgentPanel({ onClose }: Props) {
     const newRunId = genRunId()
     setRunId(newRunId)
     setBusy(true)
+    // Prior conversation as model context. v1 keeps only text turns —
+    // tool calls and approvals stay visible in the panel but don't feed
+    // back into the LLM, since reconstructing them as ToolCallPart /
+    // ToolResultPart messages is gnarly across providers.
+    const history = itemsToMessages(items as unknown as ConvItem[])
     try {
       await ipc.agent.run({
         runId: newRunId,
@@ -313,6 +375,7 @@ export function AgentPanel({ onClose }: Props) {
         prompt: parsed.prompt,
         scope,
         mode: parsed.mode,
+        history,
         currentBuffer: cur?.buffer,
         currentSelection: undefined
       })
@@ -369,6 +432,10 @@ export function AgentPanel({ onClose }: Props) {
 
   const handleClear = (): void => {
     setItems([])
+    // 「清空」语义是双清：UI 起空白，磁盘文件也删掉。重启 Quill 不会重现旧对话。
+    if (scope && scope.kind !== 'untitled') {
+      void ipc.context.clear(scope)
+    }
   }
 
   return (
@@ -504,6 +571,13 @@ function ItemView({
   }
   if (item.kind === 'phase-divider') {
     return <PhaseDividerView phase={item.phase} />
+  }
+  if (item.kind === 'truncated') {
+    return (
+      <div className="text-[11px] text-[var(--ink-faint)] font-serif-zh italic text-center py-1">
+        — 之前 {item.count} 条已截断 —
+      </div>
+    )
   }
   if (item.kind === 'assistant-text') {
     return <AssistantText text={item.text} />

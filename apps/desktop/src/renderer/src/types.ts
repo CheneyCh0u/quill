@@ -33,12 +33,17 @@ export type Scope =
   | { kind: 'single-file'; path: string }
   | { kind: 'untitled' }
 
+export type HistoryMessage =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string }
+
 export type AgentRunArgs = {
   providerId: string
   modelId: string
   prompt: string
   scope: Scope
   mode?: AgentMode
+  history?: HistoryMessage[]
   currentBuffer?: string
   currentSelection?: string
 }

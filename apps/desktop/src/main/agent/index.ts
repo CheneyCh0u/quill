@@ -15,6 +15,10 @@ export { buildSystemPrompt } from './prompt'
 
 export type AgentMode = 'auto' | 'plan' | 'build'
 
+export type HistoryMessage =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string }
+
 export type AgentRunArgs = {
   providerId: string
   modelId: string
@@ -23,6 +27,10 @@ export type AgentRunArgs = {
   /** Routing mode. 'auto' lets the Router classify; 'plan' forces the
    *  Plan→Build chain; 'build' skips Router and Plan entirely. */
   mode?: AgentMode
+  /** Prior conversation turns (user + assistant text only in v1) loaded
+   *  from the persisted context. Prepended before the new user prompt so
+   *  the model has continuity across sessions. */
+  history?: HistoryMessage[]
   /** Snapshot of the user's currently open file at run start. Injected into
    *  the system prompt so the agent has the editing context without burning
    *  a read_file tool call. */
@@ -147,6 +155,7 @@ async function runPlanPhase(
     model,
     prompt: args.prompt,
     scope: args.scope,
+    history: args.history,
     currentBuffer: args.currentBuffer,
     abortSignal: controller.signal
   })
@@ -198,7 +207,7 @@ async function runBuildPhase(
   const result = streamText({
     model,
     system: buildSystemPrompt(args.scope, args.currentBuffer, args.currentSelection, plan),
-    messages: [{ role: 'user', content: args.prompt }],
+    messages: [...(args.history ?? []), { role: 'user', content: args.prompt }],
     tools,
     stopWhen: stepCountIs(15),
     abortSignal: controller.signal
