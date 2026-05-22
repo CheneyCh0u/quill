@@ -34,6 +34,7 @@ export function AgentPanel({
     setSelectedModel,
     contextTokens,
     lastUsage,
+    compressionStatus,
     send,
     cancel,
     respond,
@@ -107,6 +108,9 @@ export function AgentPanel({
       }
       onReset={turns.length > 0 ? reset : undefined}
     >
+      {compressionStatus !== 'idle' && (
+        <CompressionBanner status={compressionStatus} />
+      )}
       <div className="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-6">
         {turns.length === 0 && (
           <p className="text-sm text-[var(--ink-faint)]">
@@ -163,6 +167,22 @@ function TurnView({
   turn: AgentTurn
   onRespond: (toolCallId: string, approved: boolean) => Promise<void>
 }): JSX.Element {
+  // Synthetic "history compressed" turn — rendered distinctly so the user
+  // notices the prior conversation was summarized rather than retained
+  // verbatim. The runId prefix is how useAgentSession marks these.
+  if (turn.runId.startsWith('summary-')) {
+    return (
+      <div className="rounded-md border border-[var(--rule)] bg-[var(--paper-dim)] px-3 py-2 space-y-1">
+        <div className="text-[11px] uppercase tracking-wider text-[var(--ink-faint)]">
+          {turn.prompt}
+        </div>
+        <article
+          className="prose-paper text-sm"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.text) }}
+        />
+      </div>
+    )
+  }
   return (
     <div className="space-y-3">
       <div className="text-sm text-[var(--ink)]">
@@ -350,6 +370,26 @@ function ModelPicker({
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+function CompressionBanner({
+  status
+}: {
+  status: 'compressing' | { error: string }
+}): JSX.Element {
+  if (status === 'compressing') {
+    return (
+      <div className="px-4 py-2 text-xs text-[var(--ink-soft)] bg-[var(--paper-dim)] border-b border-[var(--rule-soft)] flex items-center gap-2">
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+        正在压缩对话历史…
+      </div>
+    )
+  }
+  return (
+    <div className="px-4 py-2 text-xs text-[var(--accent)] bg-[var(--accent-soft)] border-b border-[var(--accent)]/30">
+      压缩失败：{status.error}。下一轮可能因上下文过长而失败。
     </div>
   )
 }

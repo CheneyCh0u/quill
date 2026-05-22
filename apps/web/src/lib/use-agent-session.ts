@@ -9,6 +9,7 @@ import type {
 import { AgentClient, type AgentConnectionStatus } from './agent-client'
 import { providersApi, type CatalogEntry } from './providers-api'
 import { coerceUsage, type Usage } from './usage'
+import { shouldCompress } from './compression'
 
 export type AgentTurn = {
   runId: string
@@ -167,6 +168,9 @@ export type AgentSession = {
   /** Last settled turn's usage. Best proxy for "current context size"
    *  since each turn's input ≈ prior turns' input + output. */
   lastUsage: Usage | undefined
+  /** Auto-compression state. `compressing` shows a panel-wide indicator;
+   *  an error surface lets the UI explain why the next prompt may overflow. */
+  compressionStatus: 'idle' | 'compressing' | { error: string }
   send: (args: {
     text: string
     scope: AgentRunArgs['scope']
@@ -200,6 +204,12 @@ export function useAgentSession(deps: {
   const [selectedModel, setSelectedModelState] = useState<SelectedModel | null>(() =>
     restoreSelectedModel()
   )
+  const [compressionStatus, setCompressionStatus] = useState<
+    'idle' | 'compressing' | { error: string }
+  >('idle')
+  // Guard against double-firing: a turn might finish twice in rare retry
+  // edge cases. Track which runIds we've already considered for compression.
+  const compressedFor = useRef<Set<string>>(new Set())
 
   const onCompleteRef = useRef(deps.onActivityComplete)
   useEffect(() => {
@@ -358,9 +368,12 @@ export function useAgentSession(deps: {
 
   const reset = useCallback(() => {
     setTurns([])
+    setCompressionStatus('idle')
+    compressedFor.current.clear()
   }, [])
 
-  // Derive context window + last usage from catalog + turns.
+  // Derive context window + last usage from catalog + turns. Must be
+  // declared before the compression closures that read them.
   const contextTokens = useMemo(() => {
     if (!selectedModel || !catalog) return 0
     const profile = catalog.find((p) => p.id === selectedModel.providerId)
@@ -373,6 +386,90 @@ export function useAgentSession(deps: {
     }
     return undefined
   }, [turns])
+
+  /**
+   * Auto-compression flow.
+   *
+   * Triggered (in a useEffect below) when `lastUsage` crosses 85% of the
+   * model's context window. We pack all settled turns into messages,
+   * call the server's compression agent, and on success replace the
+   * whole `turns` array with one synthetic "summary" turn so the next
+   * prompt starts from a clean — but contextually informed — slate.
+   *
+   * Why replace rather than append: keeps the visible UI honest about
+   * what's actually in the LLM's context window. The summary IS the
+   * conversation now.
+   */
+  const handleCompressionEvent = useCallback((event: AgentEvent): void => {
+    switch (event.type) {
+      case 'compression-start':
+        setCompressionStatus('compressing')
+        break
+      case 'compression-complete':
+        // Replace history with a single synthetic turn carrying the
+        // summary. The prompt is a placeholder describing what happened;
+        // text is the actual summary the LLM will see next round.
+        setTurns([
+          {
+            runId: 'summary-' + Date.now(),
+            prompt: `(已压缩前面 ${event.originalCount} 轮对话)`,
+            text: event.summary,
+            toolCalls: [],
+            pendingApprovals: new Map(),
+            status: 'done'
+          }
+        ])
+        setCompressionStatus('idle')
+        break
+      case 'compression-error':
+        setCompressionStatus({ error: event.message })
+        break
+      case 'error':
+        setCompressionStatus({ error: event.message })
+        break
+      default:
+        break
+    }
+  }, [])
+
+  const runCompression = useCallback(async (): Promise<void> => {
+    if (!selectedModel || !lastUsage) return
+    const messages = buildHistory(turns)
+    if (messages.length === 0) return
+    const runId = 'compress-' + newId()
+    setCompressionStatus('compressing')
+    try {
+      await client.compress(
+        runId,
+        {
+          providerId: selectedModel.providerId,
+          modelId: selectedModel.modelId,
+          messages,
+          originalCount: turns.filter((t) => t.status === 'done').length,
+          lastInputTokens: lastUsage.input + lastUsage.output,
+          contextTokens: contextTokens || undefined
+        },
+        handleCompressionEvent
+      )
+    } catch (err) {
+      setCompressionStatus({
+        error: err instanceof Error ? err.message : String(err)
+      })
+    }
+  }, [client, selectedModel, turns, lastUsage, contextTokens, handleCompressionEvent])
+
+  // Watch token usage and auto-fire a compression pass when we cross the
+  // safety threshold. Guarded by compressedFor so the same finished turn
+  // can't trigger twice if its usage flickers through React's commit phases.
+  useEffect(() => {
+    if (compressionStatus !== 'idle') return
+    if (!shouldCompress(lastUsage, contextTokens, 0.85)) return
+    const latestDone = [...turns].reverse().find((t) => t.status === 'done')
+    if (!latestDone) return
+    if (compressedFor.current.has(latestDone.runId)) return
+    compressedFor.current.add(latestDone.runId)
+    void runCompression()
+  }, [turns, lastUsage, contextTokens, compressionStatus, runCompression])
 
   return {
     client,
@@ -387,6 +484,7 @@ export function useAgentSession(deps: {
     setSelectedModel,
     contextTokens,
     lastUsage,
+    compressionStatus,
     send,
     cancel,
     respond,

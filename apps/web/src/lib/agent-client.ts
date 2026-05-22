@@ -4,6 +4,7 @@ import type {
   AgentRunArgs,
   ApprovalResponse,
   ClientAgentMessage,
+  CompressionRunArgs,
   PlanApprovalResponse,
   ServerAgentMessage
 } from '@quill/shared-types'
@@ -160,6 +161,29 @@ export class AgentClient {
       }
     })
     await this.send({ type: 'run', runId, args })
+  }
+
+  /**
+   * Run the compression agent. Emits compression-start / compression-
+   * complete / compression-error events through onEvent; the complete
+   * event carries the summary text the caller folds back into history.
+   */
+  async compress(
+    runId: string,
+    args: CompressionRunArgs,
+    onEvent: AgentEventHandler
+  ): Promise<void> {
+    this.handlers.set(runId, (event) => {
+      onEvent(event)
+      if (
+        event.type === 'compression-complete' ||
+        event.type === 'compression-error' ||
+        event.type === 'error'
+      ) {
+        this.handlers.delete(runId)
+      }
+    })
+    await this.send({ type: 'compress', runId, args })
   }
 
   async cancel(runId: string): Promise<void> {
