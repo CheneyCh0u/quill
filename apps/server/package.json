@@ -13,6 +13,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@quill/agent": "workspace:*",
     "@quill/shared-types": "workspace:*",
     "bcryptjs": "^2.4.3",
     "hono": "^4.7.0",

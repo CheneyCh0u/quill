@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { loadConfig } from './config'
 import { createAuthRoutes } from './auth-routes'
 import { createVaultRoutes } from './vault'
+import { createAgentRoutes } from './agent'
 import { requireSession } from './auth'
 
 const CONFIG_PATH = process.env.QUILL_CONFIG ?? './config.yaml'
@@ -32,6 +33,16 @@ const vaultApp = new Hono()
 vaultApp.use('*', requireSession(config.auth.session_secret))
 vaultApp.route('/', createVaultRoutes(config.vault.path))
 app.route('/api/vault', vaultApp)
+
+// Agent — REST provider catalog + WebSocket run/cancel/approval stream.
+// The agent routes module owns its own session-check middleware because
+// the WS upgrade has to verify before the protocol switch.
+const agentRoutes = createAgentRoutes({
+  providers: config.ai?.providers ?? [],
+  sessionSecret: config.auth.session_secret,
+  vaultRoot: config.vault.path
+})
+app.route('/api/agent', agentRoutes.app)
 
 // Serve the built web client if present. Anything that doesn't match an
 // /api/* route falls through to here; we hand back the asset if it exists
@@ -107,5 +118,8 @@ console.log(
 
 export default {
   port: config.server.port,
-  fetch: app.fetch
+  fetch: app.fetch,
+  // Bun needs the websocket handler at the top level — Hono's
+  // upgradeWebSocket only registers the per-route logic.
+  websocket: agentRoutes.websocket
 }
