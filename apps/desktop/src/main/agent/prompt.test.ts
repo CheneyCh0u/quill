@@ -79,7 +79,10 @@ describe('buildSystemPrompt', () => {
     const p = buildSystemPrompt(scope, huge)
     expect(p).toContain('(truncated)')
     expect(p).toContain('[truncated]')
-    expect(p.length).toBeLessThan(huge.length + 1000)
+    // Cap is 4000 chars; a 4500-char run of 'a' would only appear if the
+    // truncation didn't take. Precise proxy that doesn't break when the
+    // surrounding prompt scaffolding grows.
+    expect(p).not.toContain('a'.repeat(4500))
   })
 
   it('injects selection when provided', () => {
