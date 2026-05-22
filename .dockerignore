@@ -1,0 +1,41 @@
+# Build artifacts
+node_modules
+**/node_modules
+**/dist
+**/out
+**/release
+
+# Source maps + caches
+**/*.map
+.vite
+**/.cache
+
+# Local config (must be supplied via mount; never bake into image)
+apps/server/config.yaml
+
+# Git + editor
+.git
+.gitignore
+.github
+.idea
+.vscode
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.*
+
+# Test/CI artifacts not needed inside the image
+**/*.test.ts.snap
+
+# Documentation that isn't shipped at runtime
+docs
+*.md
+!apps/server/README.md
+!apps/web/README.md
