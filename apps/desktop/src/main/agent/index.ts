@@ -6,9 +6,11 @@ import type { Scope } from './scope'
 import { createApprovalsManager, type ApprovalPayload, type ApprovalResponse } from './approvals'
 import { classifyIntent, type RouteDecision } from './router'
 import { streamPlan, type Plan } from './plan'
+import { createPlanApprovalsManager, type PlanApprovalResponse } from './plan-approvals'
 
 export type { Scope } from './scope'
 export type { ApprovalPayload, ApprovalResponse } from './approvals'
+export type { PlanApprovalResponse } from './plan-approvals'
 export type { RouteDecision } from './router'
 export type { Plan, PlanStep } from './plan'
 export { buildSystemPrompt } from './prompt'
@@ -70,19 +72,23 @@ export type AgentEvent =
   | { type: 'plan-delta'; partial: Partial<Plan> }
   | { type: 'plan-complete'; plan: Plan }
   | { type: 'plan-usage'; usage: unknown }
+  | { type: 'plan-approval-request'; plan: Plan }
   | { type: 'step-finish'; usage?: unknown }
   | { type: 'finish'; usage?: unknown; finishReason?: string }
   | { type: 'error'; message: string }
 
 const runs = new Map<string, AbortController>()
 const approvals = createApprovalsManager()
+const planApprovals = createPlanApprovalsManager()
 
 export function cancelRun(runId: string): boolean {
   const c = runs.get(runId)
   // Free any awaiting approval prompts so their tool calls return immediately.
   // Done before abort() so the tool's `execute` has a chance to settle before
-  // streamText reports an aborted state.
+  // streamText reports an aborted state. Plan approvals get cancelled too —
+  // a paused-before-Build run would otherwise hang.
   approvals.cancelRun(runId)
+  planApprovals.cancelRun(runId)
   if (!c) return false
   c.abort()
   return true
@@ -94,6 +100,13 @@ export function respondApproval(
   response: ApprovalResponse
 ): boolean {
   return approvals.respond(runId, toolCallId, response)
+}
+
+export function respondPlanApproval(
+  runId: string,
+  response: PlanApprovalResponse
+): boolean {
+  return planApprovals.respond(runId, response)
 }
 
 /**
@@ -143,6 +156,21 @@ export async function runAgent(
       // If plan failed (returned undefined) or was cancelled, runPlanPhase
       // has already emitted error/finish — bail.
       if (!plan) return
+
+      // Pause for the user to edit / approve / dismiss the plan. The
+      // renderer drives this via `agent:plan-approval-respond`. cancelRun
+      // resolves the promise as { approved: false } so we don't hang.
+      onEvent({ type: 'plan-approval-request', plan })
+      const response = await planApprovals.request(runId, plan)
+      if (controller.signal.aborted) return
+      if (!response.approved) {
+        // User dismissed the plan or run was cancelled — emit finish so the
+        // UI knows we're idle, then stop. No Build.
+        onEvent({ type: 'finish' })
+        return
+      }
+      // Approved: use the (possibly edited) plan returned by the renderer.
+      plan = response.plan
       onEvent({ type: 'phase-start', phase: 'build' })
     }
 
@@ -158,6 +186,7 @@ export async function runAgent(
     }
   } finally {
     approvals.cancelRun(runId)
+    planApprovals.cancelRun(runId)
     runs.delete(runId)
   }
 }

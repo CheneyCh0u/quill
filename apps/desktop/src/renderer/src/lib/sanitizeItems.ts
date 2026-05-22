@@ -20,6 +20,12 @@ export function sanitizeItems(items: ConvItem[]): ConvItem[] {
     if (item.kind === 'plan' && item.status === 'streaming') {
       return { ...item, status: 'complete' as const }
     }
+    if (item.kind === 'plan' && item.status === 'awaiting') {
+      // Quill quit while the user was still deciding. Treat as dismissed so
+      // we don't render ghost approve/cancel buttons that point at a runId
+      // the main process no longer remembers.
+      return { ...item, status: 'dismissed' as const }
+    }
     return item
   })
 }

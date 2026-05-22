@@ -66,6 +66,9 @@ export type AgentRunArgs = {
 
 export type ApprovalPayload = Record<string, unknown>
 export type ApprovalResponse = { approved: boolean; reason?: string }
+export type PlanApprovalResponse =
+  | { approved: true; plan: Plan }
+  | { approved: false }
 
 export type AgentMode = 'auto' | 'plan' | 'build'
 
@@ -88,6 +91,7 @@ export type AgentEvent =
   | { type: 'plan-delta'; partial: Partial<Plan> }
   | { type: 'plan-complete'; plan: Plan }
   | { type: 'plan-usage'; usage: unknown }
+  | { type: 'plan-approval-request'; plan: Plan }
   | { type: 'step-finish'; usage?: unknown }
   | { type: 'finish'; usage?: unknown; finishReason?: string }
   | { type: 'error'; message: string }
@@ -128,6 +132,10 @@ const api = {
       toolCallId: string
       response: ApprovalResponse
     }): Promise<boolean> => ipcRenderer.invoke('agent:approval-respond', args),
+    respondPlanApproval: (args: {
+      runId: string
+      response: PlanApprovalResponse
+    }): Promise<boolean> => ipcRenderer.invoke('agent:plan-approval-respond', args),
     onEvent(cb: (payload: { runId: string; event: AgentEvent }) => void): () => void {
       const handler = (_: unknown, payload: { runId: string; event: AgentEvent }): void =>
         cb(payload)

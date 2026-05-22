@@ -35,7 +35,11 @@ export type ConvItem =
       resultError?: string
       resultPath?: string
     }
-  | { kind: 'plan'; steps: unknown[]; status: 'streaming' | 'complete' }
+  | {
+      kind: 'plan'
+      steps: unknown[]
+      status: 'streaming' | 'awaiting' | 'complete' | 'dismissed'
+    }
   | { kind: 'route'; decision: unknown }
   | { kind: 'phase-divider'; phase: 'plan' | 'build' }
   | { kind: 'error'; message: string }

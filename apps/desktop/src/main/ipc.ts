@@ -17,9 +17,11 @@ import {
   runAgent,
   cancelRun,
   respondApproval,
+  respondPlanApproval,
   type AgentRunArgs,
   type AgentEvent,
   type ApprovalResponse,
+  type PlanApprovalResponse,
   type Scope
 } from './agent'
 import { createContextStore } from './agent/context'
@@ -231,6 +233,11 @@ export function registerIpc(): void {
       _evt,
       args: { runId: string; toolCallId: string; response: ApprovalResponse }
     ) => respondApproval(args.runId, args.toolCallId, args.response)
+  )
+  ipcMain.handle(
+    'agent:plan-approval-respond',
+    async (_evt, args: { runId: string; response: PlanApprovalResponse }) =>
+      respondPlanApproval(args.runId, args.response)
   )
 
   ipcMain.handle(

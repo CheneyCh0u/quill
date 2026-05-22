@@ -64,7 +64,15 @@ type Item =
       resultPath?: string
     }
   | { kind: 'route'; decision: RouteDecision }
-  | { kind: 'plan'; steps: PlanStep[]; status: 'streaming' | 'complete' }
+  | {
+      kind: 'plan'
+      steps: PlanStep[]
+      status: 'streaming' | 'awaiting' | 'complete' | 'dismissed'
+      /** Per-step inclusion toggle, only used while status='awaiting' but
+       *  preserved after for visual record. Defaults to all true when the
+       *  plan first lands. */
+      enabled?: boolean[]
+    }
   | { kind: 'phase-divider'; phase: 'plan' | 'build' }
   | { kind: 'truncated'; count: number }
   | { kind: 'plan-usage'; usage: unknown }
@@ -308,9 +316,22 @@ export function AgentPanel({ onClose }: Props) {
       }
       if (event.type === 'plan-complete') {
         const idx = prev.findIndex((it) => it.kind === 'plan' && it.status === 'streaming')
-        const final: Item = { kind: 'plan', steps: event.plan.steps, status: 'complete' }
+        // New flow: the run pauses here. We move to 'awaiting' to surface
+        // the per-step checkboxes + 执行/取消 buttons. enabled[] mirrors
+        // steps[] length and starts all-true.
+        const final: Item = {
+          kind: 'plan',
+          steps: event.plan.steps,
+          status: 'awaiting',
+          enabled: event.plan.steps.map(() => true)
+        }
         if (idx === -1) return [...prev, final]
         return [...prev.slice(0, idx), final, ...prev.slice(idx + 1)]
+      }
+      if (event.type === 'plan-approval-request') {
+        // Audit-only signal — plan-complete already flipped to 'awaiting'
+        // with the same data. Kept distinct in the backend for log clarity.
+        return prev
       }
       if (event.type === 'plan-usage') {
         return [...prev, { kind: 'plan-usage', usage: event.usage }]
@@ -413,6 +434,66 @@ export function AgentPanel({ onClose }: Props) {
     await ipc.agent.cancel(runId)
     // The cancel itself produces an 'error' event with message 'cancelled'
     // which clears busy/runId. We don't clear here to avoid race.
+  }, [runId])
+
+  // Per-step checkbox toggle on an awaiting plan. Plain UI mutation; nothing
+  // crosses IPC until the user clicks 执行.
+  const handlePlanStepToggle = useCallback(
+    (stepIndex: number): void => {
+      setItems((prev) =>
+        prev.map((it) => {
+          if (it.kind !== 'plan' || it.status !== 'awaiting') return it
+          const next = it.enabled ? [...it.enabled] : it.steps.map(() => true)
+          next[stepIndex] = !(next[stepIndex] ?? true)
+          return { ...it, enabled: next }
+        })
+      )
+    },
+    []
+  )
+
+  const handlePlanExecute = useCallback(async (): Promise<void> => {
+    if (!runId) return
+    // Snapshot the awaiting plan + its current enabled[] selection, build
+    // the edited plan, and tell main to resume into Build with it.
+    let edited: { steps: PlanStep[] } | null = null
+    setItems((prev) => {
+      const idx = prev.findIndex((it) => it.kind === 'plan' && it.status === 'awaiting')
+      if (idx === -1) return prev
+      const card = prev[idx] as Extract<Item, { kind: 'plan' }>
+      const enabled = card.enabled ?? card.steps.map(() => true)
+      const filtered = card.steps.filter((_, i) => enabled[i])
+      // Need at least one step — if user unchecked all, treat as dismiss.
+      if (filtered.length === 0) {
+        return prev.map((it, i) =>
+          i === idx ? ({ ...card, status: 'dismissed' as const } as Item) : it
+        )
+      }
+      edited = { steps: filtered }
+      return prev.map((it, i) =>
+        i === idx ? ({ ...card, status: 'complete' as const } as Item) : it
+      )
+    })
+    if (!edited) {
+      await ipc.agent.respondPlanApproval({ runId, response: { approved: false } })
+      return
+    }
+    await ipc.agent.respondPlanApproval({
+      runId,
+      response: { approved: true, plan: edited }
+    })
+  }, [runId])
+
+  const handlePlanDismiss = useCallback(async (): Promise<void> => {
+    if (!runId) return
+    setItems((prev) =>
+      prev.map((it) =>
+        it.kind === 'plan' && it.status === 'awaiting'
+          ? ({ ...it, status: 'dismissed' as const } as Item)
+          : it
+      )
+    )
+    await ipc.agent.respondPlanApproval({ runId, response: { approved: false } })
   }, [runId])
 
   const handleApproval = useCallback(
@@ -522,7 +603,14 @@ export function AgentPanel({ onClose }: Props) {
           </div>
         )}
         {items.map((item, i) => (
-          <ItemView key={i} item={item} onApproval={handleApproval} />
+          <ItemView
+            key={i}
+            item={item}
+            onApproval={handleApproval}
+            onPlanStepToggle={handlePlanStepToggle}
+            onPlanExecute={handlePlanExecute}
+            onPlanDismiss={handlePlanDismiss}
+          />
         ))}
         {busy && (
           <div className="flex items-center gap-2 text-[12px] text-[var(--ink-faint)]">
@@ -576,10 +664,16 @@ export function AgentPanel({ onClose }: Props) {
 
 function ItemView({
   item,
-  onApproval
+  onApproval,
+  onPlanStepToggle,
+  onPlanExecute,
+  onPlanDismiss
 }: {
   item: Item
   onApproval: (toolCallId: string, approved: boolean) => Promise<void>
+  onPlanStepToggle: (stepIndex: number) => void
+  onPlanExecute: () => Promise<void>
+  onPlanDismiss: () => Promise<void>
 }) {
   if (item.kind === 'user') {
     return (
@@ -597,7 +691,16 @@ function ItemView({
     return <RouteBadgeView decision={item.decision} />
   }
   if (item.kind === 'plan') {
-    return <PlanCardView steps={item.steps} status={item.status} />
+    return (
+      <PlanCardView
+        steps={item.steps}
+        status={item.status}
+        enabled={item.enabled}
+        onStepToggle={onPlanStepToggle}
+        onExecute={onPlanExecute}
+        onDismiss={onPlanDismiss}
+      />
+    )
   }
   if (item.kind === 'phase-divider') {
     return <PhaseDividerView phase={item.phase} />
@@ -672,26 +775,61 @@ function PhaseDividerView({ phase }: { phase: 'plan' | 'build' }) {
 
 function PlanCardView({
   steps,
-  status
+  status,
+  enabled,
+  onStepToggle,
+  onExecute,
+  onDismiss
 }: {
   steps: PlanStep[]
-  status: 'streaming' | 'complete'
+  status: 'streaming' | 'awaiting' | 'complete' | 'dismissed'
+  enabled?: boolean[]
+  onStepToggle: (stepIndex: number) => void
+  onExecute: () => Promise<void>
+  onDismiss: () => Promise<void>
 }) {
+  const editable = status === 'awaiting'
+  const dimmed = status === 'dismissed'
+  const enabledCount = editable
+    ? (enabled ?? steps.map(() => true)).filter(Boolean).length
+    : steps.length
+
   return (
-    <div className="rounded-md border border-[var(--rule)] bg-[var(--paper)] overflow-hidden">
+    <div
+      className={`rounded-md border ${editable ? 'border-[var(--accent)]/50' : 'border-[var(--rule)]'} bg-[var(--paper)] overflow-hidden ${dimmed ? 'opacity-60' : ''}`}
+    >
       <div className="px-3 py-2 flex items-center gap-2 text-[12px] bg-[var(--paper-soft)] border-b border-[var(--rule-soft)]">
         <ListChecks className="w-3.5 h-3.5 text-[var(--accent)]" />
         <span className="font-serif-zh italic text-[var(--ink-soft)]">计划</span>
         {status === 'streaming' && (
           <Loader2 className="w-3 h-3 animate-spin text-[var(--ink-faint)]" />
         )}
+        {status === 'awaiting' && (
+          <span className="text-[11px] text-[var(--accent)] font-serif-zh italic">
+            等待确认
+          </span>
+        )}
+        {status === 'dismissed' && (
+          <span className="text-[11px] text-[var(--ink-faint)] font-serif-zh italic">
+            已取消
+          </span>
+        )}
         <span className="ml-auto font-mono text-[11px] text-[var(--ink-faint)]">
-          {steps.length} 步
+          {editable && enabledCount !== steps.length
+            ? `${enabledCount}/${steps.length} 步`
+            : `${steps.length} 步`}
         </span>
       </div>
       <ol className="px-3 py-2 space-y-1.5">
         {steps.map((step, i) => (
-          <PlanStepItem key={step.id ?? `s-${i}`} index={i + 1} step={step} />
+          <PlanStepItem
+            key={step.id ?? `s-${i}`}
+            index={i + 1}
+            step={step}
+            editable={editable}
+            enabled={enabled?.[i] ?? true}
+            onToggle={() => onStepToggle(i)}
+          />
         ))}
         {steps.length === 0 && (
           <li className="text-[12px] text-[var(--ink-faint)] font-serif-zh italic py-1">
@@ -699,32 +837,75 @@ function PlanCardView({
           </li>
         )}
       </ol>
+      {status === 'awaiting' && (
+        <div className="flex border-t border-[var(--rule-soft)]">
+          <button
+            onClick={() => void onDismiss()}
+            className="no-drag flex-1 px-3 py-2 text-[12px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)] transition border-r border-[var(--rule-soft)]"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => void onExecute()}
+            disabled={enabledCount === 0}
+            className="no-drag flex-1 px-3 py-2 text-[12px] font-medium text-[var(--paper)] bg-[var(--accent)] hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            执行 {enabledCount > 0 && enabledCount !== steps.length ? `(${enabledCount})` : ''}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-function PlanStepItem({ index, step }: { index: number; step: PlanStep }) {
+function PlanStepItem({
+  index,
+  step,
+  editable,
+  enabled,
+  onToggle
+}: {
+  index: number
+  step: PlanStep
+  editable: boolean
+  enabled: boolean
+  onToggle: () => void
+}) {
   const [open, setOpen] = useState(false)
   const hasDetail = !!step.why || (step.files && step.files.length > 0)
+  const muted = editable && !enabled
   return (
     <li className="text-[12px] leading-[1.5]">
-      <button
-        onClick={() => hasDetail && setOpen((v) => !v)}
-        className={`no-drag w-full flex items-start gap-2 text-left ${
-          hasDetail ? 'cursor-pointer hover:text-[var(--ink)]' : 'cursor-default'
-        }`}
-      >
-        <span className="font-mono text-[var(--ink-faint)] shrink-0 mt-[1px]">
-          {String(index).padStart(2, '0')}.
-        </span>
-        <span className="text-[var(--ink)] flex-1">{step.title}</span>
-        {hasDetail &&
-          (open ? (
-            <ChevronDown className="w-3 h-3 mt-1 text-[var(--ink-faint)]" />
-          ) : (
-            <ChevronRight className="w-3 h-3 mt-1 text-[var(--ink-faint)]" />
-          ))}
-      </button>
+      <div className={`flex items-start gap-2 ${muted ? 'opacity-50' : ''}`}>
+        {editable && (
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={onToggle}
+            className="no-drag mt-[3px] shrink-0 accent-[var(--accent)] cursor-pointer"
+            title={enabled ? '取消勾选以跳过此步' : '勾选以包含此步'}
+          />
+        )}
+        <button
+          onClick={() => hasDetail && setOpen((v) => !v)}
+          className={`no-drag flex-1 flex items-start gap-2 text-left ${
+            hasDetail ? 'cursor-pointer hover:text-[var(--ink)]' : 'cursor-default'
+          }`}
+        >
+          <span className="font-mono text-[var(--ink-faint)] shrink-0 mt-[1px]">
+            {String(index).padStart(2, '0')}.
+          </span>
+          <span className={`text-[var(--ink)] flex-1 ${muted ? 'line-through' : ''}`}>
+            {step.title}
+          </span>
+          {hasDetail &&
+            (open ? (
+              <ChevronDown className="w-3 h-3 mt-1 text-[var(--ink-faint)]" />
+            ) : (
+              <ChevronRight className="w-3 h-3 mt-1 text-[var(--ink-faint)]" />
+            ))}
+        </button>
+      </div>
       {open && hasDetail && (
         <div className="ml-7 mt-1 text-[11px] text-[var(--ink-soft)] space-y-0.5">
           {step.why && <div className="font-serif-zh italic">why: {step.why}</div>}

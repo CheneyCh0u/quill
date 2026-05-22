@@ -4,6 +4,7 @@ import type {
   ApprovalResponse,
   FileNode,
   MenuCommand,
+  PlanApprovalResponse,
   Scope
 } from '../types'
 
@@ -51,6 +52,10 @@ export const ipc = {
       toolCallId: string
       response: ApprovalResponse
     }): Promise<boolean> => window.quill.agent.respondApproval(args),
+    respondPlanApproval: (args: {
+      runId: string
+      response: PlanApprovalResponse
+    }): Promise<boolean> => window.quill.agent.respondPlanApproval(args),
     onEvent: (cb: (payload: { runId: string; event: AgentEvent }) => void) =>
       window.quill.agent.onEvent(cb)
   },

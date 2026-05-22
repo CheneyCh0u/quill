@@ -60,6 +60,14 @@ describe('sanitizeItems', () => {
     expect(out[0].steps).toEqual([{ id: 's1', title: 'do thing' }])
   })
 
+  it('dismisses an awaiting plan — session was killed before user decided', () => {
+    const items: ConvItem[] = [
+      { kind: 'plan', steps: [{ id: 's1', title: 'do thing' }], status: 'awaiting' }
+    ]
+    const out = sanitizeItems(items) as Array<Extract<ConvItem, { kind: 'plan' }>>
+    expect(out[0].status).toBe('dismissed')
+  })
+
   it('is idempotent', () => {
     const items: ConvItem[] = [
       {
