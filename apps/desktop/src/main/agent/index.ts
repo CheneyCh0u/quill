@@ -1,4 +1,4 @@
-import { streamText, stepCountIs } from 'ai'
+import { streamText, stepCountIs, type ModelMessage } from 'ai'
 import { makeModel } from './providers'
 import { makeTools } from './tools'
 import { buildSystemPrompt } from './prompt'
@@ -15,9 +15,30 @@ export { buildSystemPrompt } from './prompt'
 
 export type AgentMode = 'auto' | 'plan' | 'build'
 
+// Cross-session conversation context. Subset of ai-sdk v6 ModelMessage —
+// the runtime accepts it structurally when spread into `messages`.
+type ToolCallPart = {
+  type: 'tool-call'
+  toolCallId: string
+  toolName: string
+  input: unknown
+}
+type ToolResultOutput =
+  | { type: 'json'; value: unknown }
+  | { type: 'error-json'; value: unknown }
+  | { type: 'execution-denied'; reason?: string }
+type ToolResultPart = {
+  type: 'tool-result'
+  toolCallId: string
+  toolName: string
+  output: ToolResultOutput
+}
+type AssistantPart = { type: 'text'; text: string } | ToolCallPart
+
 export type HistoryMessage =
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string }
+  | { role: 'assistant'; content: string | AssistantPart[] }
+  | { role: 'tool'; content: ToolResultPart[] }
 
 export type AgentRunArgs = {
   providerId: string
@@ -27,9 +48,9 @@ export type AgentRunArgs = {
   /** Routing mode. 'auto' lets the Router classify; 'plan' forces the
    *  Plan→Build chain; 'build' skips Router and Plan entirely. */
   mode?: AgentMode
-  /** Prior conversation turns (user + assistant text only in v1) loaded
-   *  from the persisted context. Prepended before the new user prompt so
-   *  the model has continuity across sessions. */
+  /** Prior conversation turns (user + assistant + tool calls/results from
+   *  persisted context). Prepended before the new user prompt so the model
+   *  has continuity across sessions. */
   history?: HistoryMessage[]
   /** Snapshot of the user's currently open file at run start. Injected into
    *  the system prompt so the agent has the editing context without burning
@@ -207,7 +228,13 @@ async function runBuildPhase(
   const result = streamText({
     model,
     system: buildSystemPrompt(args.scope, args.currentBuffer, args.currentSelection, plan),
-    messages: [...(args.history ?? []), { role: 'user', content: args.prompt }],
+    // Cast bridges our narrower IPC-friendly HistoryMessage (which uses
+    // `unknown` for JSON values) to AI SDK's stricter ModelMessage (uses
+    // `JSONValue`). At runtime the payloads serialize identically.
+    messages: [
+      ...((args.history ?? []) as unknown as ModelMessage[]),
+      { role: 'user', content: args.prompt }
+    ],
     tools,
     stopWhen: stepCountIs(15),
     abortSignal: controller.signal

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { streamObject } from 'ai'
-import type { LanguageModel } from 'ai'
+import type { LanguageModel, ModelMessage } from 'ai'
 import type { Scope } from './scope'
 
 const MAX_BUFFER_CHARS = 3000
@@ -86,9 +86,28 @@ export function buildPlanSystemPrompt(scope: Scope, currentBuffer?: string): str
   return lines.join('\n')
 }
 
+type PlanToolCallPart = {
+  type: 'tool-call'
+  toolCallId: string
+  toolName: string
+  input: unknown
+}
+type PlanToolResultOutput =
+  | { type: 'json'; value: unknown }
+  | { type: 'error-json'; value: unknown }
+  | { type: 'execution-denied'; reason?: string }
+type PlanToolResultPart = {
+  type: 'tool-result'
+  toolCallId: string
+  toolName: string
+  output: PlanToolResultOutput
+}
+type PlanAssistantPart = { type: 'text'; text: string } | PlanToolCallPart
+
 export type PlanHistoryMessage =
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string }
+  | { role: 'assistant'; content: string | PlanAssistantPart[] }
+  | { role: 'tool'; content: PlanToolResultPart[] }
 
 export type PlanRunArgs = {
   model: LanguageModel
@@ -112,11 +131,17 @@ export type PlanStreamResult = {
  * full plan.
  */
 export function streamPlan(args: PlanRunArgs): PlanStreamResult {
+  // Plan agent runs without tools, so tool messages in history would be
+  // nonsense to it. Keep only user/assistant turns; assistant content is
+  // accepted as either string or parts array.
+  const planHistory = (args.history ?? []).filter(
+    (m) => m.role === 'user' || m.role === 'assistant'
+  ) as unknown as ModelMessage[]
   const result = streamObject({
     model: args.model,
     schema: PlanSchema,
     system: buildPlanSystemPrompt(args.scope, args.currentBuffer),
-    messages: [...(args.history ?? []), { role: 'user', content: args.prompt }],
+    messages: [...planHistory, { role: 'user', content: args.prompt }],
     abortSignal: args.abortSignal
   })
   return {

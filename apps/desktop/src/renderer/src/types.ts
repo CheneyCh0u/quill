@@ -33,9 +33,31 @@ export type Scope =
   | { kind: 'single-file'; path: string }
   | { kind: 'untitled' }
 
+// Subset of ai-sdk v6's ModelMessage we serialize across IPC. Mirror only —
+// the canonical shape lives in renderer/lib/itemsToMessages.ts (Message type)
+// and the runtime layer in main accepts it structurally.
+export type ToolCallPart = {
+  type: 'tool-call'
+  toolCallId: string
+  toolName: string
+  input: unknown
+}
+export type ToolResultOutput =
+  | { type: 'json'; value: unknown }
+  | { type: 'error-json'; value: unknown }
+  | { type: 'execution-denied'; reason?: string }
+export type ToolResultPart = {
+  type: 'tool-result'
+  toolCallId: string
+  toolName: string
+  output: ToolResultOutput
+}
+export type AssistantPart = { type: 'text'; text: string } | ToolCallPart
+
 export type HistoryMessage =
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string }
+  | { role: 'assistant'; content: string | AssistantPart[] }
+  | { role: 'tool'; content: ToolResultPart[] }
 
 export type AgentRunArgs = {
   providerId: string
