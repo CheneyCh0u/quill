@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { FileNode } from '@quill/shared-types'
+import type { FileNode, Scope } from '@quill/shared-types'
+import { AgentPanel } from '../components/AgentPanel'
 import { Editor } from '../components/Editor'
 import { FileTree } from '../components/FileTree'
 import { ModeSwitcher, type ViewMode } from '../components/ModeSwitcher'
@@ -22,6 +23,14 @@ export function Vault(): JSX.Element {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mode, setMode] = useState<ViewMode>('preview')
   const [save, setSave] = useState<SaveStatus>('idle')
+  const [aiOpen, setAiOpen] = useState(false)
+
+  // The server overrides scope.root with its configured vault path. We
+  // send a placeholder so the protocol's required field is satisfied.
+  const agentScope: Scope = useMemo(
+    () => ({ kind: 'workspace', root: '<vault>' }),
+    []
+  )
 
   const dirty = buffer !== source
 
@@ -194,6 +203,20 @@ export function Vault(): JSX.Element {
               <ModeSwitcher value={mode} onChange={setMode} />
             </>
           )}
+          <button
+            type="button"
+            onClick={() => setAiOpen((o) => !o)}
+            aria-pressed={aiOpen}
+            title="AI"
+            className={[
+              'text-sm rounded px-2 py-1 transition-colors',
+              aiOpen
+                ? 'bg-[--accent-soft] text-[--ink]'
+                : 'text-[--ink-faint] hover:text-[--ink] hover:bg-[--paper-soft]'
+            ].join(' ')}
+          >
+            AI
+          </button>
         </header>
         <div className="flex-1 overflow-y-auto scroll-thin">
           {loadErr && (
@@ -213,6 +236,22 @@ export function Vault(): JSX.Element {
           )}
         </div>
       </main>
+
+      {/* AgentPanel — side rail on md+, full-screen sheet on H5. */}
+      {aiOpen && (
+        <aside
+          className={[
+            'fixed inset-0 z-30 md:static md:z-auto md:w-96 md:flex-shrink-0',
+            'md:border-l md:border-[--rule]'
+          ].join(' ')}
+        >
+          <AgentPanel
+            scope={agentScope}
+            currentBuffer={selected ? buffer : undefined}
+            onClose={() => setAiOpen(false)}
+          />
+        </aside>
+      )}
     </div>
   )
 }

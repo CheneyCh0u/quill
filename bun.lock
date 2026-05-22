@@ -54,6 +54,7 @@
       "name": "@quill/server",
       "version": "0.0.1",
       "dependencies": {
+        "@quill/agent": "workspace:*",
         "@quill/shared-types": "workspace:*",
         "bcryptjs": "^2.4.3",
         "hono": "^4.7.0",

@@ -140,3 +140,39 @@ export type CompressionRunArgs = {
   lastInputTokens?: number
   contextTokens?: number
 }
+
+// ============================================================
+// Agent WebSocket protocol
+//
+// Used by apps/server (/api/agent endpoint) and apps/web (AgentClient).
+// One WebSocket connection per browser session; multiple concurrent runs
+// are multiplexed by `runId`. Server messages always echo the run id so
+// the client can dispatch events to the right local handler.
+// ============================================================
+
+export type ClientAgentMessage =
+  | { type: 'run'; runId: string; args: AgentRunArgs }
+  | { type: 'cancel'; runId: string }
+  | {
+      type: 'approval'
+      runId: string
+      toolCallId: string
+      response: ApprovalResponse
+    }
+  | { type: 'plan-approval'; runId: string; response: PlanApprovalResponse }
+  | { type: 'compress'; runId: string; args: CompressionRunArgs }
+
+export type ServerAgentMessage = { type: 'event'; runId: string; event: AgentEvent }
+
+// ============================================================
+// Agent provider metadata
+//
+// Returned by GET /api/agent/providers so the web UI can build a model
+// picker without ever seeing api_keys. Server side reads ai.providers
+// in config.yaml and strips secrets before responding.
+// ============================================================
+
+export type AgentProviderInfo = {
+  id: string
+  models: string[]
+}
