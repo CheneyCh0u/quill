@@ -5,11 +5,20 @@ import { resolve, join, dirname } from 'node:path'
 import type { Dirent } from 'node:fs'
 import { inScope, type Scope } from './scope'
 import type { ApprovalPayload, ApprovalResponse } from './approvals'
+import { checkUrl } from './url-guard'
+import { extractText } from './html-extract'
 
 export type ApprovalRequester = (
   toolCallId: string,
   payload: ApprovalPayload
 ) => Promise<ApprovalResponse>
+
+/** Injected for tests; defaults to global fetch in production. */
+export type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>
+
+const WEB_FETCH_TIMEOUT_MS = 15_000
+const WEB_FETCH_BODY_CAP = 100_000 // bytes consumed from the wire
+const WEB_FETCH_CONTENT_CAP = 50_000 // chars handed to the model
 
 const MD_EXT = /\.(md|markdown|mdown|mkd)$/i
 const MAX_RESULTS = 50
@@ -85,7 +94,11 @@ async function walkScope(
   await walk(root)
 }
 
-export function makeTools(scope: Scope, requestApproval: ApprovalRequester) {
+export function makeTools(
+  scope: Scope,
+  requestApproval: ApprovalRequester,
+  fetcher: Fetcher = (input, init) => fetch(input, init)
+) {
   return {
     read_file: tool({
       description:
@@ -371,8 +384,115 @@ export function makeTools(scope: Scope, requestApproval: ApprovalRequester) {
           return { ok: false, error: err instanceof Error ? err.message : String(err) }
         }
       }
+    }),
+
+    web_fetch: tool({
+      description:
+        "Fetch a URL and return its text content. Use this when the user pastes a link or refers to one. Returns ok:false on errors (bad URL, blocked private/loopback host, non-2xx status, network failure, unsupported content type like PDF or images); surface the error to the user instead of silently retrying. HTML pages are stripped of script/style/nav and title is extracted. Content capped at ~50KB.",
+      inputSchema: z.object({
+        url: z.string().describe('Full http(s) URL')
+      }),
+      execute: async ({ url }) => {
+        const guard = checkUrl(url)
+        if (!guard.ok) return { ok: false, error: guard.error }
+
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), WEB_FETCH_TIMEOUT_MS)
+        let res: Response
+        try {
+          res = await fetcher(guard.url, {
+            redirect: 'follow',
+            signal: controller.signal,
+            headers: { 'user-agent': 'Quill-Agent/1.0' }
+          })
+        } catch (err) {
+          clearTimeout(timer)
+          if (controller.signal.aborted) {
+            return { ok: false, error: `fetch timed out after ${WEB_FETCH_TIMEOUT_MS / 1000}s` }
+          }
+          return {
+            ok: false,
+            error: `network error: ${err instanceof Error ? err.message : String(err)}`
+          }
+        }
+        clearTimeout(timer)
+
+        if (!res.ok) {
+          return { ok: false, error: `fetch returned HTTP ${res.status}` }
+        }
+
+        const contentType = (res.headers.get('content-type') ?? '').toLowerCase()
+        const isHtml = contentType.includes('text/html') || contentType.includes('application/xhtml')
+        const isJson = contentType.includes('application/json')
+        const isPlain = contentType.startsWith('text/') && !isHtml
+        if (!isHtml && !isJson && !isPlain) {
+          return { ok: false, error: `unsupported content type: ${contentType || 'unknown'}` }
+        }
+
+        // Read up to WEB_FETCH_BODY_CAP bytes; reject huge bodies early.
+        let raw: string
+        try {
+          raw = await readBodyCapped(res, WEB_FETCH_BODY_CAP)
+        } catch (err) {
+          return {
+            ok: false,
+            error: `read error: ${err instanceof Error ? err.message : String(err)}`
+          }
+        }
+
+        let title: string | undefined
+        let content: string
+        if (isHtml) {
+          const extracted = extractText(raw)
+          title = extracted.title
+          content = extracted.text
+        } else if (isJson) {
+          try {
+            content = JSON.stringify(JSON.parse(raw), null, 2)
+          } catch {
+            content = raw
+          }
+        } else {
+          content = raw
+        }
+
+        const overCap = content.length > WEB_FETCH_CONTENT_CAP
+        if (overCap) content = content.slice(0, WEB_FETCH_CONTENT_CAP)
+
+        return {
+          ok: true,
+          url: res.url || guard.url.toString(),
+          status: res.status,
+          contentType,
+          title,
+          content,
+          truncated: overCap || raw.length >= WEB_FETCH_BODY_CAP
+        }
+      }
     })
   }
+}
+
+async function readBodyCapped(res: Response, cap: number): Promise<string> {
+  // Prefer streaming so a multi-MB response doesn't allocate fully. If the
+  // platform doesn't expose a reader (rare in our Electron/Bun targets),
+  // fall back to .text() and slice.
+  const reader = res.body?.getReader()
+  if (!reader) {
+    const t = await res.text()
+    return t.slice(0, cap)
+  }
+  const decoder = new TextDecoder('utf-8', { fatal: false })
+  let out = ''
+  while (out.length < cap) {
+    const { value, done } = await reader.read()
+    if (done) break
+    if (value) {
+      out += decoder.decode(value, { stream: true })
+    }
+  }
+  out += decoder.decode()
+  return out.slice(0, cap)
 }
 
 export type AgentTools = ReturnType<typeof makeTools>

@@ -15,6 +15,20 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('rejected by the runtime')
   })
 
+  it('declares web_fetch and tells the agent to surface failures to the user', () => {
+    // Available in all scopes — it doesn't touch the fs.
+    for (const scope of [
+      { kind: 'workspace', root: '/r' } as Scope,
+      { kind: 'single-file', path: '/r/x.md' } as Scope,
+      { kind: 'untitled' } as Scope
+    ]) {
+      const p = buildSystemPrompt(scope)
+      expect(p).toContain('web_fetch')
+      // The user explicitly wants "fetch fail → tell user" behavior.
+      expect(p).toMatch(/ok:\s*false|fail|cannot fetch|tell the user/i)
+    }
+  })
+
   it('workspace mode declares write tools and approval requirement', () => {
     const scope: Scope = { kind: 'workspace', root: '/r' }
     const p = buildSystemPrompt(scope)

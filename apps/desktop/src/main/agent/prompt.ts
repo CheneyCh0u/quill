@@ -82,6 +82,14 @@ export function buildSystemPrompt(
     )
   }
   lines.push('')
+  lines.push(
+    'Web tool (all scopes): web_fetch(url) pulls a URL\'s text content. Use ' +
+      'when the user shares a link. Returns ok:false on bad URLs, blocked ' +
+      'hosts (private/loopback), non-2xx status, network errors, or unsupported ' +
+      'content types (PDF, images). When it fails, tell the user what went ' +
+      'wrong — do not retry the same URL silently.'
+  )
+  lines.push('')
   lines.push('Respond in the same language as the user. Keep responses focused.')
   lines.push(
     'Investigate via tool calls when needed; do not invent file contents you ' +
