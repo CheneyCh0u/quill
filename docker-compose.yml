@@ -1,0 +1,43 @@
+# Quill self-host. One-command deploy:
+#
+#   1.  ./scripts/quill-init.sh      # generates ./config.yaml + ./vault/
+#   2.  docker compose up -d         # builds the image + starts the service
+#   3.  open http://localhost:3000
+#
+# See docs/deployment.md for HTTPS / reverse proxy / backup details.
+
+services:
+  quill:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quill:latest
+    container_name: quill
+    restart: unless-stopped
+
+    ports:
+      # Bind to localhost by default — keeps the server off the public
+      # internet until you've fronted it with HTTPS (Caddy / nginx /
+      # Cloudflare Tunnel). Switch to "3000:3000" to expose directly.
+      - "127.0.0.1:3000:3000"
+
+    volumes:
+      # Vault data — *all* user-editable markdown lives here. Survives
+      # `docker compose down` and image rebuilds.
+      - ./vault:/data/vault
+      # Server config, mounted read-only so the container can't
+      # accidentally rewrite it.
+      - ./config.yaml:/data/config.yaml:ro
+
+    # Pass-through env so config.yaml can reference ${OPENAI_API_KEY}
+    # etc. without baking secrets into the file on disk.
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
