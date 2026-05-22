@@ -123,6 +123,9 @@ export type PlanStreamResult = {
   partial: AsyncIterable<Partial<Plan>>
   /** Resolves with the final, fully-validated plan once streaming ends. */
   final: Promise<Plan>
+  /** Resolves with the LLM call's token usage. Same shape ai-sdk exposes
+   *  on streamObject — coerce in the consumer. */
+  usage: Promise<unknown>
 }
 
 /**
@@ -146,6 +149,7 @@ export function streamPlan(args: PlanRunArgs): PlanStreamResult {
   })
   return {
     partial: result.partialObjectStream as AsyncIterable<Partial<Plan>>,
-    final: result.object as Promise<Plan>
+    final: result.object as Promise<Plan>,
+    usage: (result as unknown as { usage: Promise<unknown> }).usage
   }
 }

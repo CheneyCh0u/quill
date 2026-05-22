@@ -69,6 +69,7 @@ export type AgentEvent =
   | { type: 'phase-start'; phase: 'plan' | 'build' }
   | { type: 'plan-delta'; partial: Partial<Plan> }
   | { type: 'plan-complete'; plan: Plan }
+  | { type: 'plan-usage'; usage: unknown }
   | { type: 'step-finish'; usage?: unknown }
   | { type: 'finish'; usage?: unknown; finishReason?: string }
   | { type: 'error'; message: string }
@@ -172,7 +173,7 @@ async function runPlanPhase(
   controller: AbortController,
   onEvent: (event: AgentEvent) => void
 ): Promise<Plan | undefined> {
-  const { partial, final } = streamPlan({
+  const { partial, final, usage } = streamPlan({
     model,
     prompt: args.prompt,
     scope: args.scope,
@@ -189,6 +190,15 @@ async function runPlanPhase(
     }
     const full = await final
     onEvent({ type: 'plan-complete', plan: full })
+    // Emit usage *after* plan-complete so the UI's token counter folds it
+    // in only once the plan visibly settled. Failures here are non-fatal —
+    // an SDK that doesn't expose usage just leaves the counter unchanged.
+    try {
+      const u = await usage
+      if (u) onEvent({ type: 'plan-usage', usage: u })
+    } catch {
+      /* SDK promise rejected → no usage data for this turn, that's fine */
+    }
     return full
   } catch (err) {
     if (controller.signal.aborted) {

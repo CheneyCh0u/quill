@@ -20,6 +20,7 @@ import { ipc } from '../lib/ipc'
 import { render as renderMd } from '../lib/markdown'
 import { itemsToMessages, type ConvItem } from '../lib/itemsToMessages'
 import { sanitizeItems } from '../lib/sanitizeItems'
+import { coerceUsage, sumUsage, formatTokens } from '../lib/usage'
 import type {
   AgentEvent,
   AgentMode,
@@ -66,6 +67,7 @@ type Item =
   | { kind: 'plan'; steps: PlanStep[]; status: 'streaming' | 'complete' }
   | { kind: 'phase-divider'; phase: 'plan' | 'build' }
   | { kind: 'truncated'; count: number }
+  | { kind: 'plan-usage'; usage: unknown }
   | { kind: 'error'; message: string }
   | { kind: 'finish'; usage?: unknown }
 
@@ -310,6 +312,9 @@ export function AgentPanel({ onClose }: Props) {
         if (idx === -1) return [...prev, final]
         return [...prev.slice(0, idx), final, ...prev.slice(idx + 1)]
       }
+      if (event.type === 'plan-usage') {
+        return [...prev, { kind: 'plan-usage', usage: event.usage }]
+      }
       if (event.type === 'error') {
         return [...prev, { kind: 'error', message: event.message }]
       }
@@ -344,6 +349,20 @@ export function AgentPanel({ onClose }: Props) {
 
   const canRun = !!scope && !!provider && !busy && input.trim().length > 0
   const canCancel = busy && runId !== null
+
+  // Cumulative token usage for this conversation. Derived from items[] so it
+  // survives restart for free and resets on 清空 (which empties items). We
+  // sum every 'finish' and 'plan-usage' payload through coerceUsage; the
+  // helper returns undefined when a payload has no recognizable shape, which
+  // sumUsage silently skips.
+  const totalUsage = useMemo(() => {
+    const usages = items.flatMap((it) => {
+      if (it.kind === 'finish') return [coerceUsage(it.usage)]
+      if (it.kind === 'plan-usage') return [coerceUsage(it.usage)]
+      return []
+    })
+    return sumUsage(usages)
+  }, [items])
 
   const handleSend = useCallback(async () => {
     if (!canRun || !provider || !scope) return
@@ -464,7 +483,7 @@ export function AgentPanel({ onClose }: Props) {
         </button>
       </header>
 
-      {/* status strip: scope + provider */}
+      {/* status strip: scope + provider + cumulative tokens */}
       <div className="px-4 py-2 border-b border-[var(--rule-soft)] flex items-center gap-3 text-[11px]">
         <span className="font-mono text-[var(--ink-faint)] truncate" title={scope ? JSON.stringify(scope) : ''}>
           {scopeLabel(scope)}
@@ -480,6 +499,17 @@ export function AgentPanel({ onClose }: Props) {
           </span>
         ) : (
           <span className="text-[var(--ink-faint)] font-serif-zh italic">加载中…</span>
+        )}
+        {totalUsage.total > 0 && (
+          <>
+            <span className="text-[var(--ink-ghost)] ml-auto">·</span>
+            <span
+              className="font-mono text-[var(--ink-faint)] shrink-0 tabular-nums"
+              title={`本次对话累计：输入 ${formatTokens(totalUsage.input)} / 输出 ${formatTokens(totalUsage.output)} / 共 ${formatTokens(totalUsage.total)} tokens`}
+            >
+              ↑{formatTokens(totalUsage.input)} ↓{formatTokens(totalUsage.output)}
+            </span>
+          </>
         )}
       </div>
 
