@@ -6,7 +6,7 @@ import { Editor } from '../components/Editor'
 import { FileTree, type FileTreeHandle } from '../components/FileTree'
 import { ModeSwitcher, type ViewMode } from '../components/ModeSwitcher'
 import { Preview } from '../components/Preview'
-import { RemoteVault, UnauthorizedError } from '../lib/remote-vault'
+import { RemoteVault, UnauthorizedError } from '@quill/vault-adapter'
 import { logout } from '../lib/auth'
 import { useAgentSession } from '../lib/use-agent-session'
 

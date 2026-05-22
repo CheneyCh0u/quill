@@ -1,29 +1,17 @@
 import type { FileNode, FileStat } from '@quill/shared-types'
-import type { VaultProvider } from '@quill/vault-adapter'
+import type { VaultProvider } from './types'
 
 /**
- * Thrown when an HTTP call hits 401 — the auth wrapper redirects to /login.
- * Other status codes throw plain Error with the response body so the caller
- * can surface a useful message.
+ * Thrown when an HTTP call to the Quill server hits 401 — the calling
+ * UI typically reacts by surfacing a login prompt or redirecting. Other
+ * status codes throw a plain Error with the response body included so
+ * callers can show a meaningful message.
  */
 export class UnauthorizedError extends Error {
   constructor() {
     super('unauthorized')
     this.name = 'UnauthorizedError'
   }
-}
-
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    credentials: 'include'
-  })
-  if (res.status === 401) throw new UnauthorizedError()
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${res.statusText}: ${body}`)
-  }
-  return (await res.json()) as T
 }
 
 type ServerEntry = {
@@ -50,9 +38,20 @@ function toFileNode(e: ServerEntry): FileNode {
 }
 
 /**
- * VaultProvider backed by the Quill server's REST API. Single-level `list`
- * via /api/vault/list?dir=... matches the design doc lazy-load model;
- * sync-status methods will be added when manual sync UI lands.
+ * VaultProvider backed by the Quill server's REST API.
+ *
+ * Cookie auth: `credentials: 'include'` lets the browser (or Electron
+ * renderer's session) attach the `quill-session` cookie automatically.
+ * The desktop app's renderer goes through the same Electron net stack as
+ * regular fetch, so cookies set by a successful /api/auth/login persist
+ * for subsequent vault calls without any extra wiring.
+ *
+ * baseUrl: empty by default (same origin, the web client's setup). The
+ * desktop app passes the full server URL ("https://quill.example.com").
+ *
+ * Sync-status methods (push/pull/syncStatus) and a local-cache layer
+ * are intentionally NOT here yet — when the manual-sync UI lands, those
+ * become a separate `SyncingRemoteVault` that composes this one.
  */
 export class RemoteVault implements VaultProvider {
   readonly kind = 'remote' as const
@@ -61,6 +60,16 @@ export class RemoteVault implements VaultProvider {
 
   private url(path: string): string {
     return `${this.baseUrl}${path}`
+  }
+
+  private async call<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(this.url(path), { ...init, credentials: 'include' })
+    if (res.status === 401) throw new UnauthorizedError()
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`${res.status} ${res.statusText}: ${body}`)
+    }
+    return (await res.json()) as T
   }
 
   async read(path: string): Promise<string> {
@@ -74,7 +83,7 @@ export class RemoteVault implements VaultProvider {
   }
 
   async write(path: string, content: string): Promise<void> {
-    await call(this.url(`/api/vault/file/${encodeURI(path)}`), {
+    await this.call(`/api/vault/file/${encodeURI(path)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'text/plain' },
       body: content
@@ -82,7 +91,7 @@ export class RemoteVault implements VaultProvider {
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {
-    await call(this.url('/api/vault/move'), {
+    await this.call('/api/vault/move', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: oldPath, to: newPath })
@@ -91,15 +100,16 @@ export class RemoteVault implements VaultProvider {
 
   async list(path: string): Promise<FileNode[]> {
     const dir = path.replace(/^\/+/, '')
-    const url = this.url(`/api/vault/list${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`)
-    const entries = await call<ServerEntry[]>(url)
+    const url = `/api/vault/list${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`
+    const entries = await this.call<ServerEntry[]>(url)
     return entries.map(toFileNode)
   }
 
   async stat(path: string): Promise<FileStat> {
-    // The current server doesn't expose a dedicated /stat. Derive from list
-    // of the parent; for the rare consumer that needs this (drag-overlay)
-    // we'll add a real /stat endpoint when sync-state UI starts using it.
+    // The current server doesn't expose a dedicated /stat. Derive from
+    // list of the parent; consumers that need this rarely (drag overlay)
+    // can pay the extra round-trip. A real /api/vault/stat endpoint is a
+    // future addition when sync-state UI starts using it heavily.
     const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
     const siblings = await this.list(parent)
     const me = siblings.find((s) => s.path === path)
@@ -113,7 +123,7 @@ export class RemoteVault implements VaultProvider {
   }
 
   async mkdir(path: string): Promise<void> {
-    await call(this.url('/api/vault/mkdir'), {
+    await this.call('/api/vault/mkdir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: path.replace(/^\/+/, '') })
@@ -121,15 +131,13 @@ export class RemoteVault implements VaultProvider {
   }
 
   async delete(path: string): Promise<void> {
-    await call(this.url(`/api/vault/file/${encodeURI(path)}`), {
-      method: 'DELETE'
-    })
+    await this.call(`/api/vault/file/${encodeURI(path)}`, { method: 'DELETE' })
   }
 
   async deleteDir(path: string, recursive: boolean): Promise<void> {
-    const url = this.url(
-      `/api/vault/dir/${encodeURI(path)}${recursive ? '?recursive=1' : ''}`
+    await this.call(
+      `/api/vault/dir/${encodeURI(path)}${recursive ? '?recursive=1' : ''}`,
+      { method: 'DELETE' }
     )
-    await call(url, { method: 'DELETE' })
   }
 }

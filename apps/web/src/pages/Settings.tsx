@@ -5,7 +5,7 @@ import {
   type CatalogEntry,
   type ConfiguredProvider
 } from '../lib/providers-api'
-import { UnauthorizedError } from '../lib/remote-vault'
+import { UnauthorizedError } from '@quill/vault-adapter'
 
 const PROVIDER_LABELS: Record<string, string> = {
   kimi: 'Kimi · Coding Plan',

@@ -1,4 +1,4 @@
-import { UnauthorizedError } from './remote-vault'
+import { UnauthorizedError } from '@quill/vault-adapter'
 
 export async function login(password: string): Promise<void> {
   const res = await fetch('/api/auth/login', {

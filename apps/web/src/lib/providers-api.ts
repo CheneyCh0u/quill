@@ -6,7 +6,7 @@
  * configured (id, model — never api_key over the wire).
  */
 
-import { UnauthorizedError } from './remote-vault'
+import { UnauthorizedError } from '@quill/vault-adapter'
 
 export type CatalogModel = {
   id: string
