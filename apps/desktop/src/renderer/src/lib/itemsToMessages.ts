@@ -44,6 +44,7 @@ export type ConvItem =
   | { kind: 'phase-divider'; phase: 'plan' | 'build' }
   | { kind: 'error'; message: string }
   | { kind: 'finish'; usage?: unknown }
+  | { kind: 'plan-usage'; usage: unknown }
   | { kind: 'truncated'; count: number }
 
 /**

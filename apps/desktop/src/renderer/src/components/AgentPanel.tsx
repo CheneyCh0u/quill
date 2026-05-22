@@ -13,7 +13,8 @@ import {
   Check,
   ListChecks,
   Route as RouteIcon,
-  PlayCircle
+  PlayCircle,
+  Download
 } from 'lucide-react'
 import { useApp } from '../state/app'
 import { ipc } from '../lib/ipc'
@@ -21,6 +22,7 @@ import { render as renderMd } from '../lib/markdown'
 import { itemsToMessages, type ConvItem } from '../lib/itemsToMessages'
 import { sanitizeItems } from '../lib/sanitizeItems'
 import { coerceUsage, sumUsage, formatTokens } from '../lib/usage'
+import { exportConversation } from '../lib/exportConversation'
 import type {
   AgentEvent,
   AgentMode,
@@ -538,6 +540,28 @@ export function AgentPanel({ onClose }: Props) {
     }
   }
 
+  const handleExport = useCallback(async (): Promise<void> => {
+    if (items.length === 0) return
+    const md = exportConversation(items as unknown as ConvItem[], {
+      scopeLabel: scope ? scopeLabel(scope) : undefined
+    })
+    // Default filename: agent-<scope-tail>-<YYYY-MM-DD>.md. Tail is the
+    // vault folder name or file basename — gives the user a recognizable
+    // file in the save dialog without exposing the full absolute path.
+    const tail = scope
+      ? scope.kind === 'workspace'
+        ? (scope.root.split('/').pop() ?? 'workspace')
+        : scope.kind === 'single-file'
+          ? (scope.path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'file')
+          : 'untitled'
+      : 'untitled'
+    const today = new Date().toISOString().slice(0, 10)
+    const defaultName = `agent-${tail}-${today}.md`
+    const target = await ipc.saveFileDialog(defaultName)
+    if (!target) return
+    await ipc.writeFile(target, md)
+  }, [items, scope])
+
   return (
     <aside className="w-[360px] shrink-0 border-l border-[var(--rule)] bg-[var(--paper-dim)] flex flex-col">
       <header className="h-11 px-4 flex items-center gap-2 border-b border-[var(--rule)] shrink-0 bg-[var(--paper)]">
@@ -546,14 +570,24 @@ export function AgentPanel({ onClose }: Props) {
         </span>
         <div className="flex-1" />
         {items.length > 0 && (
-          <button
-            onClick={handleClear}
-            disabled={busy}
-            className="no-drag px-2 py-1 rounded-md text-[11px] text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
-            title="清空对话"
-          >
-            清空
-          </button>
+          <>
+            <button
+              onClick={() => void handleExport()}
+              disabled={busy}
+              className="no-drag p-1.5 rounded-md text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
+              title="导出为 markdown"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleClear}
+              disabled={busy}
+              className="no-drag px-2 py-1 rounded-md text-[11px] text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
+              title="清空对话"
+            >
+              清空
+            </button>
+          </>
         )}
         <button
           onClick={onClose}
