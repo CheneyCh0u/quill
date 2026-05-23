@@ -244,7 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Snapshot prefs into a ref so action callbacks stay stable. When prefs
   // change, the ref updates without re-creating every callback.
-  const { prefs } = usePrefs()
+  const { prefs, setPref } = usePrefs()
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
 
@@ -394,7 +394,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let path = cur.path
     const isFirstSave = path === null
     if (isFirstSave) {
-      path = await ipc.saveFileDialog('untitled.md')
+      const ext = prefsRef.current.lastNewFileExt || 'md'
+      path = await ipc.saveFileDialog(`untitled.${ext}`)
       if (!path) return // user cancelled
     }
 
@@ -407,6 +408,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (isFirstSave) {
         const name = path!.split(/[/\\]/).pop() ?? path!
         addRecent({ type: 'file', path: path!, name })
+        // Remember the extension the user chose so the next untitled
+        // defaults to the same kind.
+        const m = name.match(/[^.]\.([a-z0-9]+)$/i)
+        if (m) setPref('lastNewFileExt', m[1].toLowerCase())
       }
     } catch (err) {
       // eslint-disable-next-line no-console

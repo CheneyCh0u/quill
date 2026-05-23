@@ -8,7 +8,8 @@ const node = (name: string, path: string, isDir = false): FileNode => ({
   name,
   path,
   isDirectory: isDir,
-  isMarkdown: !isDir && name.endsWith('.md')
+  isMarkdown: !isDir && name.endsWith('.md'),
+  isText: !isDir && name.endsWith('.md')
 })
 
 describe('RELOAD_CURRENT_FILE', () => {

@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Upload } from 'lucide-react'
+import { isSupportedTextFile } from '@quill/shared-types'
 import { ipc } from '../lib/ipc'
 import { useApp } from '../state/app'
-
-const MD_EXT = /\.(md|markdown|mdown|mkd)$/i
 
 export function DragOverlay() {
   const { openPathWithPrompt } = useApp()
@@ -46,7 +45,7 @@ export function DragOverlay() {
             await openPathWithPrompt({ folderPath: path })
             return
           }
-          if (stat.isFile && MD_EXT.test(path)) {
+          if (stat.isFile && isSupportedTextFile(path)) {
             await openPathWithPrompt({ filePath: path })
             return
           }
@@ -75,7 +74,7 @@ export function DragOverlay() {
       <div className="flex flex-col items-center gap-3 px-10 py-7 rounded-[10px] bg-[var(--paper)] border-2 border-dashed border-[var(--accent)]/50 shadow-lg">
         <Upload className="w-7 h-7 text-[var(--accent)]" />
         <span className="font-serif-zh italic text-sm text-[var(--ink-soft)]">
-          松手以打开 markdown 文件或文件夹
+          松手以打开文件或文件夹
         </span>
       </div>
     </div>

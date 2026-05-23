@@ -15,12 +15,17 @@ export type Prefs = {
   defaultViewMode: ViewMode
   /** Show the gutter with line numbers in the editor. */
   showLineNumbers: boolean
+  /** Extension (without dot) used for the next Cmd+N / untitled save.
+   *  Updated to whatever the user picks in the save dialog so subsequent
+   *  new files default to the same kind. */
+  lastNewFileExt: string
 }
 
 const DEFAULTS: Prefs = {
   fontSize: 14,
   defaultViewMode: 'split',
-  showLineNumbers: true
+  showLineNumbers: true,
+  lastNewFileExt: 'md'
 }
 
 const STORAGE_KEY = 'quill:prefs'
@@ -46,7 +51,13 @@ function readStored(): Prefs {
       showLineNumbers:
         typeof parsed.showLineNumbers === 'boolean'
           ? parsed.showLineNumbers
-          : DEFAULTS.showLineNumbers
+          : DEFAULTS.showLineNumbers,
+      lastNewFileExt:
+        typeof parsed.lastNewFileExt === 'string' &&
+        /^[a-z0-9]+$/i.test(parsed.lastNewFileExt) &&
+        parsed.lastNewFileExt.length <= 12
+          ? parsed.lastNewFileExt.toLowerCase()
+          : DEFAULTS.lastNewFileExt
     }
   } catch {
     return { ...DEFAULTS }

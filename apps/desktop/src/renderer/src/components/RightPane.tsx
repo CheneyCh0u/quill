@@ -2,6 +2,7 @@ import { useApp } from '../state/app'
 import { useTheme } from '../state/theme'
 import { useEffect, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
+import { getFileType } from '@quill/shared-types'
 import { PaneHeader } from './PaneHeader'
 import { Editor } from './Editor'
 import { Preview } from './Preview'
@@ -20,6 +21,11 @@ export function RightPane() {
   const { state, setBuffer, setViewMode } = useApp()
   const { theme } = useTheme()
   const cur = state.currentFile
+  // Untitled buffers are implicitly markdown (Cmd+N creates an .md file by
+  // default). Code/text files we opened from disk get edit-only — preview
+  // and outline only make sense for markdown.
+  const isMarkdownFile = !cur?.path || getFileType(cur.path).isMarkdown
+  const effectiveViewMode = isMarkdownFile ? state.viewMode : 'edit'
 
   const [editorView, setEditorView] = useState<EditorView | null>(null)
   const [previewScrollEl, setPreviewScrollEl] = useState<HTMLDivElement | null>(null)
@@ -71,16 +77,16 @@ export function RightPane() {
 
       {!cur && (
         <div className="flex-1 flex items-center justify-center text-[var(--ink-faint)] text-sm select-none font-serif-zh italic">
-          从左侧选一个 .md 文件
+          从左侧选一个文件
         </div>
       )}
 
       {cur && (
         <>
           <div className="flex-1 flex min-h-0">
-            {state.viewMode !== 'preview' && (
+            {effectiveViewMode !== 'preview' && (
               <div
-                className={`min-w-0 flex flex-col ${state.viewMode === 'split' ? 'w-1/2 border-r border-[var(--rule)]' : 'flex-1'}`}
+                className={`min-w-0 flex flex-col ${effectiveViewMode === 'split' ? 'w-1/2 border-r border-[var(--rule)]' : 'flex-1'}`}
               >
                 {search && editorView && (
                   <SearchPanel
@@ -99,22 +105,25 @@ export function RightPane() {
                     value={cur.buffer}
                     onChange={setBuffer}
                     theme={theme}
+                    filePath={cur.path ?? undefined}
                     onViewChange={setEditorView}
                   />
                 </div>
               </div>
             )}
-            {state.viewMode !== 'edit' && (
-              <div className={`min-w-0 ${state.viewMode === 'split' ? 'w-1/2' : 'flex-1'}`}>
+            {effectiveViewMode !== 'edit' && (
+              <div className={`min-w-0 ${effectiveViewMode === 'split' ? 'w-1/2' : 'flex-1'}`}>
                 <Preview value={cur.buffer} scrollRef={setPreviewScrollEl} />
               </div>
             )}
           </div>
-          <OutlineRail
-            source={cur.buffer}
-            scrollContainer={state.viewMode === 'edit' ? null : previewScrollEl}
-            editorView={editorView}
-          />
+          {isMarkdownFile && (
+            <OutlineRail
+              source={cur.buffer}
+              scrollContainer={effectiveViewMode === 'edit' ? null : previewScrollEl}
+              editorView={editorView}
+            />
+          )}
         </>
       )}
     </div>

@@ -1,0 +1,9 @@
+{
+  "name": "quill",
+  "version": "0.0.2",
+  "features": ["markdown", "preview", "agent"],
+  "config": {
+    "theme": "auto",
+    "fontSize": 14
+  }
+}

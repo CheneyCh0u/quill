@@ -163,7 +163,8 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
         name: finalPath.split('/').pop() ?? finalPath,
         path: finalPath,
         isDirectory: false,
-        isMarkdown: true
+        isMarkdown: true,
+        isText: true
       })
     } catch (err) {
       window.alert(`创建失败：${err instanceof Error ? err.message : String(err)}`)

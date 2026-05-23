@@ -8,6 +8,7 @@ import {
   Loader2,
   Check
 } from 'lucide-react'
+import { getFileType } from '@quill/shared-types'
 import { useApp } from '../state/app'
 import { useTheme } from '../state/theme'
 import { exportToPdf, exportToHtml } from '../lib/export'
@@ -31,6 +32,9 @@ export function ExportMenu() {
 
   const cur = state.currentFile
   const hasPath = !!cur?.path
+  // PDF/HTML export only makes sense for markdown — untitled (no path) is
+  // implicitly markdown until saved.
+  const canExportMd = !cur?.path || getFileType(cur.path).isMarkdown
 
   const doExportPdf = useCallback(async (): Promise<void> => {
     setOpen(false)
@@ -136,23 +140,27 @@ export function ExportMenu() {
       </button>
       {open && (
         <div className="no-drag absolute top-full right-0 mt-1 min-w-[220px] py-1.5 rounded-[10px] bg-[var(--paper)] border border-[var(--rule)] shadow-lg z-50">
-          <div className="font-display italic text-[11px] text-[var(--ink-faint)] px-3 pt-1 pb-1">
-            导出
-          </div>
-          <MenuItem
-            icon={<FileDown className="w-3.5 h-3.5" />}
-            label="导出为 PDF…"
-            shortcut="⌘⇧E"
-            onClick={doExportPdf}
-            loading={busy === 'pdf'}
-          />
-          <MenuItem
-            icon={<FileText className="w-3.5 h-3.5" />}
-            label="导出为 HTML…"
-            onClick={doExportHtml}
-            loading={busy === 'html'}
-          />
-          <div className="h-px bg-[var(--rule-soft)] mx-2 my-1.5" />
+          {canExportMd && (
+            <>
+              <div className="font-display italic text-[11px] text-[var(--ink-faint)] px-3 pt-1 pb-1">
+                导出
+              </div>
+              <MenuItem
+                icon={<FileDown className="w-3.5 h-3.5" />}
+                label="导出为 PDF…"
+                shortcut="⌘⇧E"
+                onClick={doExportPdf}
+                loading={busy === 'pdf'}
+              />
+              <MenuItem
+                icon={<FileText className="w-3.5 h-3.5" />}
+                label="导出为 HTML…"
+                onClick={doExportHtml}
+                loading={busy === 'html'}
+              />
+              <div className="h-px bg-[var(--rule-soft)] mx-2 my-1.5" />
+            </>
+          )}
           <div className="font-display italic text-[11px] text-[var(--ink-faint)] px-3 pt-0.5 pb-1">
             文件
           </div>
