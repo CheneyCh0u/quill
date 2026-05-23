@@ -238,10 +238,28 @@ export function registerIpc(): void {
     async (evt, args: { runId: string } & AgentRunArgs) => {
       const { runId, ...runArgs } = args
       const sender = evt.sender
-      await agent.runAgent(runId, runArgs, (event: AgentEvent) => {
-        if (sender.isDestroyed()) return
-        sender.send('agent:event', { runId, event })
-      })
+      // Belt-and-braces: any sync throw inside `runAgent` / `sender.send`
+      // (e.g. webContents racing between `isDestroyed()` and `send`) would
+      // otherwise leave the IPC reply hanging, which the renderer surfaces
+      // as "Error invoking remote method 'agent:run': reply was never sent"
+      // (see #87). Turning the throw into an `error` event keeps the run
+      // observable in the UI and lets the handler resolve normally.
+      try {
+        await agent.runAgent(runId, runArgs, (event: AgentEvent) => {
+          if (sender.isDestroyed()) return
+          sender.send('agent:event', { runId, event })
+        })
+      } catch (err) {
+        if (!sender.isDestroyed()) {
+          sender.send('agent:event', {
+            runId,
+            event: {
+              type: 'error',
+              message: err instanceof Error ? err.message : String(err)
+            }
+          })
+        }
+      }
     }
   )
   ipcMain.handle('agent:cancel', async (_evt, runId: string) => agent.cancelRun(runId))
@@ -250,10 +268,22 @@ export function registerIpc(): void {
     async (evt, args: { runId: string } & CompressionRunArgs) => {
       const { runId, ...rest } = args
       const sender = evt.sender
-      await agent.runCompression(runId, rest, (event: AgentEvent) => {
-        if (sender.isDestroyed()) return
-        sender.send('agent:event', { runId, event })
-      })
+      try {
+        await agent.runCompression(runId, rest, (event: AgentEvent) => {
+          if (sender.isDestroyed()) return
+          sender.send('agent:event', { runId, event })
+        })
+      } catch (err) {
+        if (!sender.isDestroyed()) {
+          sender.send('agent:event', {
+            runId,
+            event: {
+              type: 'compression-error',
+              message: err instanceof Error ? err.message : String(err)
+            }
+          })
+        }
+      }
     }
   )
 

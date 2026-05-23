@@ -17,6 +17,7 @@ import { classifyIntent } from './router'
 import { streamPlan } from './plan'
 import { createPlanApprovalsManager } from './plan-approvals'
 import { compressConversation } from './compress'
+import { consumeBuildStream } from './build-stream'
 import type { CredentialProvider } from './credentials'
 
 export type { CredentialProvider } from './credentials'
@@ -255,63 +256,11 @@ export class AgentRuntime {
       abortSignal: controller.signal
     })
 
-    for await (const chunk of result.fullStream) {
-      switch (chunk.type) {
-        case 'text-delta':
-          onEvent({
-            type: 'text-delta',
-            delta:
-              (chunk as unknown as { text?: string; delta?: string }).text ??
-              (chunk as unknown as { delta?: string }).delta ??
-              ''
-          })
-          break
-        case 'tool-call':
-          onEvent({
-            type: 'tool-call',
-            toolCallId: chunk.toolCallId,
-            name: chunk.toolName,
-            args:
-              (chunk as unknown as { input?: unknown }).input ??
-              (chunk as unknown as { args?: unknown }).args
-          })
-          break
-        case 'tool-result':
-          onEvent({
-            type: 'tool-result',
-            toolCallId: chunk.toolCallId,
-            name: chunk.toolName,
-            result:
-              (chunk as unknown as { output?: unknown }).output ??
-              (chunk as unknown as { result?: unknown }).result
-          })
-          break
-        case 'finish-step':
-          onEvent({
-            type: 'step-finish',
-            usage: (chunk as unknown as { usage?: unknown }).usage
-          })
-          break
-        case 'finish':
-          onEvent({
-            type: 'finish',
-            usage:
-              (chunk as unknown as { totalUsage?: unknown }).totalUsage ??
-              (chunk as unknown as { usage?: unknown }).usage,
-            finishReason: (chunk as unknown as { finishReason?: string }).finishReason
-          })
-          break
-        case 'error':
-          onEvent({
-            type: 'error',
-            message: String((chunk as unknown as { error?: unknown }).error)
-          })
-          break
-        default:
-          // Unhandled chunk type (reasoning, redacted, etc.) — skip silently
-          break
-      }
-    }
+    await consumeBuildStream(
+      result.fullStream as AsyncIterable<Record<string, unknown> & { type: string }>,
+      controller.signal,
+      onEvent
+    )
   }
 
   /**
