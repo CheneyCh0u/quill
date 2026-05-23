@@ -1,6 +1,6 @@
 import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
-import { extname, join } from 'node:path'
+import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { createWindow, openSettingsWindow, type InitialAction } from './windows'
@@ -22,13 +22,16 @@ import {
   clearRemote
 } from './remote-store'
 import { AgentRuntime, createContextStore, type CredentialProvider } from '@quill/agent'
-import type {
-  AgentEvent,
-  AgentRunArgs,
-  ApprovalResponse,
-  CompressionRunArgs,
-  PlanApprovalResponse,
-  Scope
+import {
+  getFileType,
+  allTextExtensions,
+  type AgentEvent,
+  type AgentRunArgs,
+  type ApprovalResponse,
+  type CompressionRunArgs,
+  type FileNode,
+  type PlanApprovalResponse,
+  type Scope
 } from '@quill/shared-types'
 
 const CONTEXTS_DIR = join(homedir(), '.quill', 'contexts')
@@ -40,14 +43,6 @@ const credentials: CredentialProvider = {
   getKey: (providerId) => getProviderKey(providerId)
 }
 const agent = new AgentRuntime({ credentials })
-
-export type FileNode = {
-  name: string
-  path: string
-  isDirectory: boolean
-  isMarkdown: boolean
-  children?: FileNode[]
-}
 
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -64,8 +59,6 @@ const SKIP_DIRS = new Set([
   'release'
 ])
 
-const MD_EXT = new Set(['.md', '.markdown', '.mdown', '.mkd'])
-
 async function scanDir(path: string): Promise<FileNode[]> {
   const entries = await fs.readdir(path, { withFileTypes: true })
   const nodes: FileNode[] = []
@@ -79,15 +72,17 @@ async function scanDir(path: string): Promise<FileNode[]> {
         path: childPath,
         isDirectory: true,
         isMarkdown: false,
+        isText: false,
         children: await scanDir(childPath)
       })
     } else if (entry.isFile()) {
-      const ext = extname(entry.name).toLowerCase()
+      const info = getFileType(entry.name)
       nodes.push({
         name: entry.name,
         path: childPath,
         isDirectory: false,
-        isMarkdown: MD_EXT.has(ext)
+        isMarkdown: info.isMarkdown,
+        isText: info.isText
       })
     }
   }
@@ -110,7 +105,9 @@ export function registerIpc(): void {
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
-        { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }
+        { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] },
+        { name: 'Text Files', extensions: allTextExtensions() },
+        { name: 'All Files', extensions: ['*'] }
       ]
     })
     return result.canceled ? null : result.filePaths[0]
@@ -126,7 +123,9 @@ export function registerIpc(): void {
       const result = await dialog.showSaveDialog({
         defaultPath: defaultName ?? 'untitled.md',
         filters: filters ?? [
-          { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }
+          { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] },
+          { name: 'Text Files', extensions: allTextExtensions() },
+          { name: 'All Files', extensions: ['*'] }
         ]
       })
       return result.canceled || !result.filePath ? null : result.filePath

@@ -21,7 +21,13 @@ function makeBridge(): {
     listDir: async (path) => {
       calls.push({ method: 'listDir', args: [path] })
       return [
-        { name: 'a.md', path: `${path}/a.md`, isDirectory: false, isMarkdown: true }
+        {
+          name: 'a.md',
+          path: `${path}/a.md`,
+          isDirectory: false,
+          isMarkdown: true,
+          isText: true
+        }
       ]
     },
     stat: async (path) => {
@@ -67,7 +73,13 @@ describe('LocalProvider', () => {
     const result = await provider.list('/x')
     expect(calls).toEqual([{ method: 'listDir', args: ['/x'] }])
     expect(result).toEqual([
-      { name: 'a.md', path: '/x/a.md', isDirectory: false, isMarkdown: true }
+      {
+        name: 'a.md',
+        path: '/x/a.md',
+        isDirectory: false,
+        isMarkdown: true,
+        isText: true
+      }
     ])
   })
 

@@ -27,7 +27,8 @@ class FakeVault implements VaultProvider {
       if (!path.startsWith(prefix)) continue
       const rest = path.slice(prefix.length)
       if (rest.includes('/')) continue
-      out.push({ name: rest, path, isDirectory: false, isMarkdown: rest.endsWith('.md') })
+      const isMd = rest.endsWith('.md')
+      out.push({ name: rest, path, isDirectory: false, isMarkdown: isMd, isText: isMd })
     }
     return Promise.resolve(out)
   }

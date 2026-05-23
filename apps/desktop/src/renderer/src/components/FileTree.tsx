@@ -72,7 +72,7 @@ function FileTreeNode({ node, depth, currentPath, dirty, onSelect }: NodeProps) 
     )
   }
 
-  if (node.isMarkdown) {
+  if (node.isText) {
     return (
       <li>
         <button
@@ -102,7 +102,7 @@ function FileTreeNode({ node, depth, currentPath, dirty, onSelect }: NodeProps) 
       <div
         style={{ paddingLeft: padLeft + 16 }}
         className="flex items-center gap-1.5 py-1 pr-2 text-[var(--ink-ghost)] select-none cursor-default"
-        title="只支持打开 .md 文件"
+        title="不支持的文件类型"
       >
         <span className="text-[10px] shrink-0">▪</span>
         <span className="truncate">{node.name}</span>

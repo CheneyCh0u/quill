@@ -1,4 +1,4 @@
-import type { FileNode, FileStat } from '@quill/shared-types'
+import { getFileType, type FileNode, type FileStat } from '@quill/shared-types'
 import type { VaultProvider } from './types'
 
 /**
@@ -22,18 +22,27 @@ type ServerEntry = {
   hash?: string
 }
 
-const MD_EXT = /\.(md|markdown|mdown|mkd)$/i
-
 function nameOf(p: string): string {
   return p.split('/').pop() ?? p
 }
 
 function toFileNode(e: ServerEntry): FileNode {
+  if (e.isDirectory) {
+    return {
+      name: nameOf(e.path),
+      path: e.path,
+      isDirectory: true,
+      isMarkdown: false,
+      isText: false
+    }
+  }
+  const info = getFileType(e.path)
   return {
     name: nameOf(e.path),
     path: e.path,
-    isDirectory: e.isDirectory,
-    isMarkdown: !e.isDirectory && MD_EXT.test(e.path)
+    isDirectory: false,
+    isMarkdown: info.isMarkdown,
+    isText: info.isText
   }
 }
 

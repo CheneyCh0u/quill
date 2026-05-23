@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { promises as fs } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
 import type { Dirent } from 'node:fs'
+import { isSupportedTextFile } from '@quill/shared-types'
 import { inScope, type Scope } from './scope'
 import type { ApprovalPayload, ApprovalResponse } from './approvals'
 import { checkUrl } from './url-guard'
@@ -20,7 +21,6 @@ const WEB_FETCH_TIMEOUT_MS = 15_000
 const WEB_FETCH_BODY_CAP = 100_000 // bytes consumed from the wire
 const WEB_FETCH_CONTENT_CAP = 50_000 // chars handed to the model
 
-const MD_EXT = /\.(md|markdown|mdown|mkd)$/i
 const MAX_RESULTS = 50
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -155,7 +155,7 @@ export function makeTools(
 
     search_in_scope: tool({
       description:
-        'Case-insensitive substring search across all .md files in the scope. Returns matching file paths and line numbers. Capped at 50 results.',
+        'Case-insensitive substring search across all text files in the scope (markdown, code, plain text). Binary files are skipped. Returns matching file paths and line numbers. Capped at 50 results.',
       inputSchema: z.object({
         query: z.string().min(1).describe('Substring to search for')
       }),
@@ -166,7 +166,7 @@ export function makeTools(
         const needle = query.toLowerCase()
         const matches: Array<{ path: string; line: number; text: string }> = []
         await walkScope(scope, async (filePath) => {
-          if (!MD_EXT.test(filePath)) return
+          if (!isSupportedTextFile(filePath)) return
           try {
             const content = await fs.readFile(filePath, 'utf-8')
             const lines = content.split('\n')

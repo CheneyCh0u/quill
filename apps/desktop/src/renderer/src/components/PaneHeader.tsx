@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PanelLeftOpen } from 'lucide-react'
+import { getFileType } from '@quill/shared-types'
 import { useApp } from '../state/app'
 import { ModeSwitcher } from './ModeSwitcher'
 import { ExportMenu } from './ExportMenu'
@@ -16,6 +17,10 @@ export function PaneHeader() {
   const cur = state.currentFile
   const showExpand = mode === 'workspace' && state.sidebarCollapsed
   const hasPath = !!cur?.path
+  // Untitled (no path yet) defaults to markdown, so the mode switcher and
+  // export menu still make sense. Non-markdown files (.py, .json, ...) get
+  // them hidden — preview/outline/PDF are markdown-only.
+  const isMarkdownFile = !cur?.path || getFileType(cur.path).isMarkdown
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -160,7 +165,9 @@ export function PaneHeader() {
 
       {cur && (
         <>
-          <ModeSwitcher value={state.viewMode} onChange={setViewMode} />
+          {isMarkdownFile && (
+            <ModeSwitcher value={state.viewMode} onChange={setViewMode} />
+          )}
           <ExportMenu />
         </>
       )}

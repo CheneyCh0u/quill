@@ -3,10 +3,18 @@
 // packages/{agent, vault-adapter, core}.
 //
 // What belongs here: data shapes that travel across process / network /
-// package boundaries (IPC payloads, REST/WS messages, persisted records).
+// package boundaries (IPC payloads, REST/WS messages, persisted records),
+// plus dependency-free constants/helpers shared across processes (e.g.
+// file-type recognition). Keep this package dependency-free.
 // What does NOT belong: UI-only concerns (view mode, theme preference,
-// recent-entry list), runtime API surfaces (window.quill), framework
-// types. Keep this package dependency-free.
+// recent-entry list), runtime API surfaces (window.quill), framework types.
+
+export {
+  getFileType,
+  isSupportedTextFile,
+  allTextExtensions
+} from './fileTypes'
+export type { FileLanguage, FileTypeInfo } from './fileTypes'
 
 // ============================================================
 // File system
@@ -17,6 +25,10 @@ export type FileNode = {
   path: string
   isDirectory: boolean
   isMarkdown: boolean
+  /** True when the file is a supported text format (includes markdown, code
+   *  files, and plain-text formats). Renderer uses this to decide whether
+   *  the entry is clickable in the file tree. */
+  isText: boolean
   children?: FileNode[]
 }
 
