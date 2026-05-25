@@ -36,6 +36,12 @@ import {
 
 const CONTEXTS_DIR = join(homedir(), '.quill', 'contexts')
 const contextStore = createContextStore(CONTEXTS_DIR)
+const THEMES_DIR = join(homedir(), '.quill', 'themes')
+
+async function ensureThemesDir(): Promise<string> {
+  await fs.mkdir(THEMES_DIR, { recursive: true })
+  return THEMES_DIR
+}
 
 // Desktop credential strategy: read from the electron safeStorage-backed
 // keychain. Server will inject a config.yaml-backed implementation instead.
@@ -294,6 +300,69 @@ export function registerIpc(): void {
       contextStore.save(args.scope, args.items)
   )
   ipcMain.handle('context:clear', async (_evt, scope: Scope) => contextStore.clear(scope))
+
+  // -------- Themes ----------------------------------------------------
+  // Custom themes live as JSON files under ~/.quill/themes/. main scans
+  // the directory and ships raw JSON to renderer, which validates with
+  // zod (see lib/themeSchema.ts) — keeping schema knowledge in renderer
+  // means main doesn't need a zod dependency just to round-trip JSON.
+
+  ipcMain.handle(
+    'themes:list',
+    async (): Promise<Array<{ filename: string; raw: unknown }>> => {
+      const dir = await ensureThemesDir()
+      const entries = await fs.readdir(dir, { withFileTypes: true })
+      const out: Array<{ filename: string; raw: unknown }> = []
+      for (const e of entries) {
+        if (!e.isFile() || !e.name.toLowerCase().endsWith('.json')) continue
+        try {
+          const text = await fs.readFile(join(dir, e.name), 'utf-8')
+          out.push({ filename: e.name, raw: JSON.parse(text) })
+        } catch {
+          // Skip unreadable / malformed files — the UI lists what loaded
+          // and the user can fix the broken file directly via the
+          // "open themes folder" button.
+        }
+      }
+      return out
+    }
+  )
+
+  ipcMain.handle('themes:importDialog', async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'Theme JSON', extensions: ['json'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    const src = result.filePaths[0]
+    const dir = await ensureThemesDir()
+    const filename = src.split(/[/\\]/).pop() ?? 'imported.json'
+    const dest = join(dir, filename)
+    await fs.copyFile(src, dest)
+    return filename
+  })
+
+  ipcMain.handle(
+    'themes:exportDialog',
+    async (
+      _evt,
+      args: { suggestedFilename: string; content: string }
+    ): Promise<string | null> => {
+      const result = await dialog.showSaveDialog({
+        defaultPath: args.suggestedFilename,
+        filters: [{ name: 'Theme JSON', extensions: ['json'] }]
+      })
+      if (result.canceled || !result.filePath) return null
+      await fs.writeFile(result.filePath, args.content, 'utf-8')
+      return result.filePath
+    }
+  )
+
+  ipcMain.handle('themes:revealFolder', async (): Promise<string> => {
+    const dir = await ensureThemesDir()
+    await shell.openPath(dir)
+    return dir
+  })
   ipcMain.handle(
     'agent:approval-respond',
     async (

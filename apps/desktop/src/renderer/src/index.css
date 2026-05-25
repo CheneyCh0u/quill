@@ -1,7 +1,11 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* Tailwind `dark:` variant fires for any dark-suffixed theme so adding new
+ * built-in themes (ocean-dark, mono-dark, …) doesn't require touching every
+ * dark: utility. Both attribute selectors stay because the desktop sets
+ * "<themeId>-dark" while exports / web still use the short "dark". */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme$="-dark"], [data-theme="dark"] *, [data-theme$="-dark"] *));
 
 /* Paper theme — tokens + base + prose, shared with apps/web via @quill/core. */
 @import "@quill/core/styles/tokens.css";
@@ -61,11 +65,11 @@
   background-color: rgba(255, 138, 0, 0.65) !important;
   box-shadow: 0 0 0 1px rgba(210, 100, 0, 0.85);
 }
-[data-theme="dark"] .cm-editor .cm-searchMatch {
+:where([data-theme="dark"], [data-theme$="-dark"]) .cm-editor .cm-searchMatch {
   background-color: rgba(255, 220, 0, 0.28) !important;
   box-shadow: 0 0 0 1px rgba(255, 200, 0, 0.4);
 }
-[data-theme="dark"] .cm-editor .cm-searchMatch-selected {
+:where([data-theme="dark"], [data-theme$="-dark"]) .cm-editor .cm-searchMatch-selected {
   background-color: rgba(255, 145, 0, 0.55) !important;
   box-shadow: 0 0 0 1px rgba(255, 170, 0, 0.7);
 }
