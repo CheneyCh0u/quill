@@ -32,8 +32,12 @@ export type {
 
 export type ViewMode = 'edit' | 'split' | 'preview'
 
-export type ThemePref = 'system' | 'light' | 'dark'
-export type Theme = 'light' | 'dark'
+// Renderer-local aliases for the cross-package theme types. `Theme` is
+// kept as a synonym for `ThemeMode` because dozens of call-sites already
+// use `Theme` to mean "light or dark" — renaming would be churn.
+export type { ThemeMode, ThemePref, ThemeTokens, ThemeDef, BuiltinThemeId } from '@quill/shared-types'
+import type { ThemeMode } from '@quill/shared-types'
+export type Theme = ThemeMode
 
 export type RecentEntry = {
   type: 'folder' | 'file'

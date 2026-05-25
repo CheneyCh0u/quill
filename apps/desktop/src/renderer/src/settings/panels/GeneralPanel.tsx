@@ -1,6 +1,9 @@
+import { useCallback, useState } from 'react'
 import { useTheme } from '../../state/theme'
 import { usePrefs } from '../../state/prefs'
 import type { ThemePref, ViewMode } from '../../types'
+import { Select } from '../../components/Select'
+import { ipc } from '../../lib/ipc'
 
 type RowProps = {
   label: string
@@ -76,6 +79,44 @@ function Toggle({ checked, onChange }: ToggleProps) {
   )
 }
 
+function ThemeButton({
+  children,
+  onClick,
+  disabled
+}: {
+  children: React.ReactNode
+  onClick: () => void | Promise<void>
+  disabled?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="no-drag px-3 py-1.5 rounded-md text-[12.5px] bg-[var(--paper-soft)] text-[var(--ink)] border border-[var(--rule)] hover:bg-[var(--paper-edge)] disabled:opacity-50 disabled:cursor-not-allowed transition"
+    >
+      {children}
+    </button>
+  )
+}
+
+// Placeholder values for the "export current built-in" path. Built-in
+// theme tokens live in CSS, so JS doesn't know them — exporting a
+// built-in produces a stub the user fills in by editing the JSON.
+const TOKEN_STUB = {
+  paper: '#ffffff',
+  paperDim: '#f4f4f4',
+  paperSoft: '#eaeaea',
+  paperEdge: '#dcdcdc',
+  ink: '#111111',
+  inkSoft: '#333333',
+  inkFaint: '#666666',
+  inkGhost: '#999999',
+  rule: '#cccccc',
+  ruleSoft: '#e2e2e2',
+  accent: '#cc3333',
+  accentSoft: '#f4d8d8'
+}
+
 const THEME_OPTIONS: Array<{ value: ThemePref; label: string }> = [
   { value: 'light', label: '浅色' },
   { value: 'dark', label: '深色' },
@@ -91,8 +132,90 @@ const VIEW_MODE_OPTIONS: Array<{ value: ViewMode; label: string }> = [
 ]
 
 export function GeneralPanel() {
-  const { pref, setPref } = useTheme()
+  const {
+    pref,
+    setPref,
+    themeId,
+    setThemeId,
+    availableThemes,
+    activeCustomTheme,
+    reloadCustomThemes
+  } = useTheme()
   const { prefs, setPref: setEditorPref } = usePrefs()
+  const [busy, setBusy] = useState<'import' | 'export' | 'reload' | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const themeOptions = availableThemes.map((t) => ({
+    value: t.id,
+    label: t.name,
+    hint: t.builtin ? '内置' : '自定义'
+  }))
+
+  const handleImport = useCallback(async () => {
+    setBusy('import')
+    setNotice(null)
+    try {
+      const filename = await ipc.themes.importDialog()
+      if (filename) {
+        await reloadCustomThemes()
+        setNotice(`已导入 ${filename}`)
+      }
+    } catch (e) {
+      setNotice('导入失败：' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBusy(null)
+    }
+  }, [reloadCustomThemes])
+
+  const handleExport = useCallback(async () => {
+    setBusy('export')
+    setNotice(null)
+    try {
+      // Only custom themes carry the full token payload in JS — for a
+      // built-in we emit a minimal stub the user can fill in, so the
+      // workflow "pick claude → export → tweak → import" still works.
+      const exportable = activeCustomTheme ?? {
+        id: themeId + '-copy',
+        name: (availableThemes.find((t) => t.id === themeId)?.name ?? 'Custom') + ' (Copy)',
+        builtin: false,
+        light: TOKEN_STUB,
+        dark: TOKEN_STUB
+      }
+      const content = JSON.stringify(
+        {
+          id: exportable.id,
+          name: exportable.name,
+          light: exportable.light,
+          dark: exportable.dark
+        },
+        null,
+        2
+      )
+      const saved = await ipc.themes.exportDialog({
+        suggestedFilename: `${exportable.id}.json`,
+        content
+      })
+      if (saved) setNotice(`已导出到 ${saved}`)
+    } catch (e) {
+      setNotice('导出失败：' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBusy(null)
+    }
+  }, [activeCustomTheme, availableThemes, themeId])
+
+  const handleReveal = useCallback(async () => {
+    await ipc.themes.revealFolder()
+  }, [])
+
+  const handleReload = useCallback(async () => {
+    setBusy('reload')
+    try {
+      await reloadCustomThemes()
+      setNotice('已重新加载主题列表')
+    } finally {
+      setBusy(null)
+    }
+  }, [reloadCustomThemes])
 
   return (
     <div className="max-w-[520px]">
@@ -103,8 +226,40 @@ export function GeneralPanel() {
         外观与编辑器
       </p>
 
-      <Row label="主题" hint="跟随系统会同步 macOS 的浅 / 深色设置">
+      <Row label="模式" hint="跟随系统会同步 macOS 的浅 / 深色设置">
         <PillGroup options={THEME_OPTIONS} value={pref} onChange={setPref} />
+      </Row>
+
+      <Row label="主题" hint="内置 4 套；自定义主题来自 ~/.quill/themes/">
+        <Select
+          value={themeId}
+          onChange={setThemeId}
+          options={themeOptions}
+          ariaLabel="主题选择"
+          className="min-w-[200px]"
+        />
+      </Row>
+
+      <Row label="自定义主题" hint="JSON 文件存于 ~/.quill/themes/">
+        <div className="flex flex-wrap gap-2 items-center">
+          <ThemeButton onClick={handleImport} disabled={busy !== null}>
+            {busy === 'import' ? '导入中…' : '导入 JSON'}
+          </ThemeButton>
+          <ThemeButton onClick={handleExport} disabled={busy !== null}>
+            {busy === 'export' ? '导出中…' : '导出当前为 JSON'}
+          </ThemeButton>
+          <ThemeButton onClick={handleReveal} disabled={busy !== null}>
+            打开主题文件夹
+          </ThemeButton>
+          <ThemeButton onClick={handleReload} disabled={busy !== null}>
+            {busy === 'reload' ? '加载中…' : '重新加载'}
+          </ThemeButton>
+          {notice && (
+            <span className="font-serif-zh italic text-[12px] text-[var(--ink-faint)]">
+              {notice}
+            </span>
+          )}
+        </div>
       </Row>
 
       <Row label="编辑器字号" hint="影响 markdown 源码编辑器的字号">

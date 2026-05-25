@@ -16,6 +16,14 @@ export {
 } from './fileTypes'
 export type { FileLanguage, FileTypeInfo } from './fileTypes'
 
+export {
+  BUILTIN_THEME_IDS,
+  BUILTIN_THEME_NAMES,
+  DEFAULT_THEME_ID,
+  isBuiltinThemeId
+} from './themes'
+export type { ThemeDef, ThemeMode, ThemePref, ThemeTokens, BuiltinThemeId } from './themes'
+
 // ============================================================
 // File system
 // ============================================================

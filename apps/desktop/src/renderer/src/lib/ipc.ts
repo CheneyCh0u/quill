@@ -127,5 +127,15 @@ export const ipc = {
     setToken: (token: string | null): Promise<void> =>
       window.quill.remote.setToken(token),
     clear: (): Promise<void> => window.quill.remote.clear()
+  },
+  themes: {
+    list: (): Promise<Array<{ filename: string; raw: unknown }>> =>
+      window.quill.themes.list(),
+    importDialog: (): Promise<string | null> => window.quill.themes.importDialog(),
+    exportDialog: (args: {
+      suggestedFilename: string
+      content: string
+    }): Promise<string | null> => window.quill.themes.exportDialog(args),
+    revealFolder: (): Promise<string> => window.quill.themes.revealFolder()
   }
 }

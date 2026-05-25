@@ -1,38 +1,36 @@
 /* ============================================================
- * Paper · 纸感编辑器 — 色彩 / 字体 token
- * 暖白纸底 + 衬线大标题 + 旧打字机红强调。chrome 不靠 border
- * 也不靠 shadow 分层，靠几档纸感色阶推进。
+ * Theme tokens
+ *
+ * Two layers:
+ *   1. Syntax-highlight tokens (`--hl-*`) are bound to mode only —
+ *      a GitHub-style light palette and a darker variant. Defined
+ *      once per mode with a wide selector so any theme that sets
+ *      mode = light / dark inherits the matching palette without
+ *      having to redeclare 16 highlight colours.
+ *
+ *   2. Surface tokens (paper / ink / rule / accent) are bound to
+ *      the specific theme. Adding a built-in theme is ~14 lines.
+ *
+ * Selectors are layered so the default fallback (`:root`), the
+ * single-mode contexts (`[data-theme="light"]` used by apps/web
+ * and PDF/HTML export), and the explicit desktop themes
+ * (`[data-theme="claude-light"]`, …) all share the same rule
+ * blocks. Drift between defaults is impossible.
+ *
+ * Data attribute on <html>:
+ *   "light" | "dark"                    — single-theme contexts
+ *   "<themeId>-light" | "<themeId>-dark" — desktop, explicit selection
  * ============================================================ */
 
-:root {
-  color-scheme: light;
+/* ------------------------------------------------------------
+ * 1. Syntax highlight palettes (mode-keyed)
+ * ------------------------------------------------------------ */
 
-  /* Paper surface stack (background steps) */
-  --paper:        oklch(0.974 0.012 86);
-  --paper-dim:    oklch(0.952 0.014 84);
-  --paper-soft:   oklch(0.928 0.016 80);
-  --paper-edge:   oklch(0.892 0.018 76);
-
-  /* Ink scale (foreground) */
-  --ink:          oklch(0.225 0.018 50);
-  --ink-soft:     oklch(0.420 0.014 50);
-  --ink-faint:    oklch(0.620 0.010 50);
-  --ink-ghost:    oklch(0.780 0.008 50);
-
-  /* Hairlines */
-  --rule:         oklch(0.880 0.014 75);
-  --rule-soft:    oklch(0.920 0.012 78);
-
-  /* Accent — 旧打字机色带的红 */
-  --accent:       oklch(0.55  0.16 28);
-  --accent-soft:  oklch(0.930 0.04 35);
-
-  /* Code block surface */
-  --code-bg:      var(--paper-soft);
-  --code-border:  var(--rule);
-  --code-fg:      var(--ink);
-
-  /* highlight.js — paper-warm GitHub Light variant */
+:where(
+  :root,
+  [data-theme="light"],
+  [data-theme$="-light"]
+) {
   --hl-comment:   #8a7e6b;
   --hl-keyword:   #b53d2e;
   --hl-string:    #5a6f3a;
@@ -51,29 +49,10 @@
   --hl-addition-fg: #2a4a18;
 }
 
-[data-theme="dark"] {
-  color-scheme: dark;
-
-  --paper:        oklch(0.178 0.012 248);
-  --paper-dim:    oklch(0.206 0.012 248);
-  --paper-soft:   oklch(0.238 0.014 250);
-  --paper-edge:   oklch(0.282 0.015 250);
-
-  --ink:          oklch(0.924 0.008 80);
-  --ink-soft:     oklch(0.740 0.008 80);
-  --ink-faint:    oklch(0.540 0.008 80);
-  --ink-ghost:    oklch(0.400 0.008 80);
-
-  --rule:         oklch(0.300 0.012 248);
-  --rule-soft:    oklch(0.260 0.012 248);
-
-  --accent:       oklch(0.78  0.14 40);
-  --accent-soft:  oklch(0.300 0.08 35);
-
-  --code-bg:      var(--paper-soft);
-  --code-border:  var(--rule);
-  --code-fg:      var(--ink);
-
+:where(
+  [data-theme="dark"],
+  [data-theme$="-dark"]
+) {
   --hl-comment:   #8a8378;
   --hl-keyword:   #e87b6c;
   --hl-string:    #c8cf9a;
@@ -90,4 +69,169 @@
   --hl-deletion-fg: #ffd5cd;
   --hl-addition-bg: #1f3818;
   --hl-addition-fg: #c5e4b2;
+}
+
+/* ------------------------------------------------------------
+ * 2. Surface palettes (theme-keyed)
+ * ------------------------------------------------------------ */
+
+/* Claude — warm paper + old-typewriter red. Default. */
+:root,
+[data-theme="light"],
+[data-theme="claude-light"] {
+  color-scheme: light;
+  --paper:        oklch(0.974 0.012 86);
+  --paper-dim:    oklch(0.952 0.014 84);
+  --paper-soft:   oklch(0.928 0.016 80);
+  --paper-edge:   oklch(0.892 0.018 76);
+  --ink:          oklch(0.225 0.018 50);
+  --ink-soft:     oklch(0.420 0.014 50);
+  --ink-faint:    oklch(0.620 0.010 50);
+  --ink-ghost:    oklch(0.780 0.008 50);
+  --rule:         oklch(0.880 0.014 75);
+  --rule-soft:    oklch(0.920 0.012 78);
+  --accent:       oklch(0.55  0.16 28);
+  --accent-soft:  oklch(0.930 0.04 35);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+}
+
+[data-theme="dark"],
+[data-theme="claude-dark"] {
+  color-scheme: dark;
+  --paper:        oklch(0.178 0.012 248);
+  --paper-dim:    oklch(0.206 0.012 248);
+  --paper-soft:   oklch(0.238 0.014 250);
+  --paper-edge:   oklch(0.282 0.015 250);
+  --ink:          oklch(0.924 0.008 80);
+  --ink-soft:     oklch(0.740 0.008 80);
+  --ink-faint:    oklch(0.540 0.008 80);
+  --ink-ghost:    oklch(0.400 0.008 80);
+  --rule:         oklch(0.300 0.012 248);
+  --rule-soft:    oklch(0.260 0.012 248);
+  --accent:       oklch(0.78  0.14 40);
+  --accent-soft:  oklch(0.300 0.08 35);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+}
+
+/* Mono — pure grayscale, no chroma. Distraction-free reading. */
+[data-theme="mono-light"] {
+  color-scheme: light;
+  --paper:        oklch(0.990 0 0);
+  --paper-dim:    oklch(0.965 0 0);
+  --paper-soft:   oklch(0.935 0 0);
+  --paper-edge:   oklch(0.890 0 0);
+  --ink:          oklch(0.150 0 0);
+  --ink-soft:     oklch(0.380 0 0);
+  --ink-faint:    oklch(0.600 0 0);
+  --ink-ghost:    oklch(0.760 0 0);
+  --rule:         oklch(0.870 0 0);
+  --rule-soft:    oklch(0.930 0 0);
+  --accent:       oklch(0.250 0 0);
+  --accent-soft:  oklch(0.870 0 0);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+}
+
+[data-theme="mono-dark"] {
+  color-scheme: dark;
+  --paper:        oklch(0.130 0 0);
+  --paper-dim:    oklch(0.160 0 0);
+  --paper-soft:   oklch(0.200 0 0);
+  --paper-edge:   oklch(0.260 0 0);
+  --ink:          oklch(0.940 0 0);
+  --ink-soft:     oklch(0.740 0 0);
+  --ink-faint:    oklch(0.540 0 0);
+  --ink-ghost:    oklch(0.380 0 0);
+  --rule:         oklch(0.290 0 0);
+  --rule-soft:    oklch(0.220 0 0);
+  --accent:       oklch(0.900 0 0);
+  --accent-soft:  oklch(0.320 0 0);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+}
+
+/* Ocean — cool blue surface, cyan accent. */
+[data-theme="ocean-light"] {
+  color-scheme: light;
+  --paper:        oklch(0.978 0.014 230);
+  --paper-dim:    oklch(0.952 0.018 230);
+  --paper-soft:   oklch(0.920 0.022 232);
+  --paper-edge:   oklch(0.878 0.026 234);
+  --ink:          oklch(0.210 0.040 240);
+  --ink-soft:     oklch(0.410 0.030 240);
+  --ink-faint:    oklch(0.600 0.022 240);
+  --ink-ghost:    oklch(0.760 0.016 240);
+  --rule:         oklch(0.860 0.022 235);
+  --rule-soft:    oklch(0.920 0.016 235);
+  --accent:       oklch(0.620 0.140 220);
+  --accent-soft:  oklch(0.900 0.045 220);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+}
+
+[data-theme="ocean-dark"] {
+  color-scheme: dark;
+  --paper:        oklch(0.170 0.028 245);
+  --paper-dim:    oklch(0.200 0.028 245);
+  --paper-soft:   oklch(0.240 0.030 247);
+  --paper-edge:   oklch(0.300 0.032 248);
+  --ink:          oklch(0.920 0.020 230);
+  --ink-soft:     oklch(0.740 0.022 230);
+  --ink-faint:    oklch(0.540 0.020 230);
+  --ink-ghost:    oklch(0.400 0.016 230);
+  --rule:         oklch(0.300 0.026 245);
+  --rule-soft:    oklch(0.250 0.024 245);
+  --accent:       oklch(0.780 0.140 200);
+  --accent-soft:  oklch(0.320 0.080 210);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+}
+
+/* Solarized — Ethan Schoonover's classic palette. Surface colours
+ * are derived from the official base hex values, blue is accent.
+ * https://ethanschoonover.com/solarized/ */
+[data-theme="solarized-light"] {
+  color-scheme: light;
+  --paper:        oklch(0.965 0.025 88);   /* base3  #fdf6e3 */
+  --paper-dim:    oklch(0.935 0.030 90);
+  --paper-soft:   oklch(0.910 0.035 92);   /* base2  #eee8d5 */
+  --paper-edge:   oklch(0.870 0.040 93);
+  --ink:          oklch(0.440 0.027 215);  /* base01 #586e75 */
+  --ink-soft:     oklch(0.510 0.027 215);  /* base00 #657b83 */
+  --ink-faint:    oklch(0.620 0.018 215);  /* base0  #839496 */
+  --ink-ghost:    oklch(0.680 0.012 215);  /* base1  #93a1a1 */
+  --rule:         oklch(0.850 0.038 90);
+  --rule-soft:    oklch(0.910 0.030 90);
+  --accent:       oklch(0.550 0.150 245);  /* blue   #268bd2 */
+  --accent-soft:  oklch(0.900 0.040 245);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
+}
+
+[data-theme="solarized-dark"] {
+  color-scheme: dark;
+  --paper:        oklch(0.200 0.028 215);  /* base03 #002b36 */
+  --paper-dim:    oklch(0.250 0.028 215);  /* base02 #073642 */
+  --paper-soft:   oklch(0.300 0.030 215);
+  --paper-edge:   oklch(0.360 0.032 215);
+  --ink:          oklch(0.680 0.012 215);  /* base1  #93a1a1 */
+  --ink-soft:     oklch(0.620 0.018 215);  /* base0  #839496 */
+  --ink-faint:    oklch(0.510 0.027 215);  /* base00 #657b83 */
+  --ink-ghost:    oklch(0.440 0.027 215);  /* base01 #586e75 */
+  --rule:         oklch(0.300 0.030 215);
+  --rule-soft:    oklch(0.250 0.028 215);
+  --accent:       oklch(0.620 0.140 245);  /* blue   #268bd2, slightly lifted for dark */
+  --accent-soft:  oklch(0.320 0.080 245);
+  --code-bg:      var(--paper-soft);
+  --code-border:  var(--rule);
+  --code-fg:      var(--ink);
 }
