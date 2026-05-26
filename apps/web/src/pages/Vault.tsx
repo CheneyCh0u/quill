@@ -10,13 +10,17 @@ import { Outline, OutlineSheetButton } from '../components/Outline'
 import { Preview } from '../components/Preview'
 import { RemoteVault, UnauthorizedError } from '@quill/vault-adapter'
 import { logout } from '../lib/auth'
+import { notifyUnauthorized } from '../lib/auth-events'
 import { useAgentSession } from '../lib/use-agent-session'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | { error: string }
 
 export function Vault(): JSX.Element {
   const navigate = useNavigate()
-  const vault = useMemo(() => new RemoteVault(), [])
+  const vault = useMemo(
+    () => new RemoteVault({ onUnauthorized: notifyUnauthorized }),
+    []
+  )
   const [selected, setSelected] = useState<FileNode | null>(null)
   // `source` is the last-known disk content (what the server saw last);
   // `buffer` is the user's in-progress edits. dirty := source !== buffer.

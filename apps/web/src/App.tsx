@@ -4,6 +4,7 @@ import { Login } from './pages/Login'
 import { Vault } from './pages/Vault'
 import { Settings } from './pages/Settings'
 import { isAuthenticated } from './lib/auth'
+import { onUnauthorized } from './lib/auth-events'
 
 type AuthState = 'unknown' | 'authed' | 'guest'
 
@@ -30,6 +31,16 @@ export function App(): JSX.Element {
       navigate('/', { replace: true })
     }
   }, [auth, location.pathname, navigate])
+
+  // Global 401 handler — any vault/agent/providers call that hits 401
+  // funnels through notifyUnauthorized() and lands here, so session
+  // expiry kicks back to the login screen without a manual refresh.
+  useEffect(() => {
+    return onUnauthorized(() => {
+      setAuth('guest')
+      navigate('/login', { replace: true })
+    })
+  }, [navigate])
 
   if (auth === 'unknown') {
     return (

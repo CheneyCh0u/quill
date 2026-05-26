@@ -8,6 +8,7 @@ import type {
   PlanApprovalResponse,
   ServerAgentMessage
 } from '@quill/shared-types'
+import { notifyUnauthorized } from './auth-events'
 
 export type AgentEventHandler = (event: AgentEvent) => void
 
@@ -53,6 +54,7 @@ export class AgentClient {
 
   async fetchProviders(): Promise<AgentProviderInfo[]> {
     const res = await fetch('/api/agent/providers', { credentials: 'include' })
+    if (res.status === 401) notifyUnauthorized()
     if (!res.ok) {
       throw new Error(`failed to load providers: ${res.status}`)
     }

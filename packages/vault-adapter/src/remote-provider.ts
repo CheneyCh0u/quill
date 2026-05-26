@@ -59,6 +59,14 @@ export type RemoteVaultOptions = {
    * from a remote https server.
    */
   getAuthHeaders?: () => Promise<Record<string, string>> | Record<string, string>
+  /**
+   * Fired whenever the server returns 401 — fires before the
+   * UnauthorizedError throw so the host app can globally react (e.g. web
+   * dispatches a window event that App.tsx listens to → redirect to
+   * /login). Callers that already catch UnauthorizedError don't need this
+   * to keep working; it's strictly additive.
+   */
+  onUnauthorized?: () => void
 }
 
 /**
@@ -79,6 +87,7 @@ export class RemoteVault implements VaultProvider {
   readonly kind = 'remote' as const
   private readonly baseUrl: string
   private readonly getAuthHeaders: NonNullable<RemoteVaultOptions['getAuthHeaders']>
+  private readonly onUnauthorized: () => void
 
   constructor(options: RemoteVaultOptions | string = {}) {
     // Tolerate the older positional-baseUrl signature so existing web
@@ -87,6 +96,7 @@ export class RemoteVault implements VaultProvider {
     const opts = typeof options === 'string' ? { baseUrl: options } : options
     this.baseUrl = opts.baseUrl ?? ''
     this.getAuthHeaders = opts.getAuthHeaders ?? (() => ({}))
+    this.onUnauthorized = opts.onUnauthorized ?? (() => undefined)
   }
 
   private url(path: string): string {
@@ -107,7 +117,10 @@ export class RemoteVault implements VaultProvider {
 
   private async call<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(this.url(path), await this.withAuth(init))
-    if (res.status === 401) throw new UnauthorizedError()
+    if (res.status === 401) {
+      this.onUnauthorized()
+      throw new UnauthorizedError()
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`${res.status} ${res.statusText}: ${body}`)
@@ -120,7 +133,10 @@ export class RemoteVault implements VaultProvider {
       this.url(`/api/vault/file/${encodeURI(path)}`),
       await this.withAuth()
     )
-    if (res.status === 401) throw new UnauthorizedError()
+    if (res.status === 401) {
+      this.onUnauthorized()
+      throw new UnauthorizedError()
+    }
     if (res.status === 404) throw new Error(`file not found: ${path}`)
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     return res.text()

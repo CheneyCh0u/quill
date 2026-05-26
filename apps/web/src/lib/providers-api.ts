@@ -7,6 +7,7 @@
  */
 
 import { UnauthorizedError } from '@quill/vault-adapter'
+import { notifyUnauthorized } from './auth-events'
 
 export type CatalogModel = {
   id: string
@@ -31,7 +32,10 @@ export type ConfiguredProvider = {
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, credentials: 'include' })
-  if (res.status === 401) throw new UnauthorizedError()
+  if (res.status === 401) {
+    notifyUnauthorized()
+    throw new UnauthorizedError()
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(body || `${res.status} ${res.statusText}`)
