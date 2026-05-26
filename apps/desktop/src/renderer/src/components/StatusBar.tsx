@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Cloud, CloudOff, Sparkles } from 'lucide-react'
 import { useApp } from '../state/app'
 import { countWords } from '../lib/markdown'
 import { ThemeToggle } from './ThemeToggle'
@@ -9,11 +9,25 @@ type Props = {
   /** Undefined when the current workspace doesn't support the local agent
    *  (e.g. remote mode). Hides the toggle button entirely in that case. */
   onToggleAgent: (() => void) | undefined
+  /** Click handler for the cloud icon when the user is in local mode.
+   *  Shell wires this to its smart connect handler (auto-reconnect or
+   *  open the login dialog). */
+  onConnectRemote: () => Promise<void> | void
+  /** Click handler for the cloud icon when the user is already in remote
+   *  mode — switches the active vault back to local and restores the
+   *  snapshot captured at entry. */
+  onExitRemote: () => Promise<void> | void
 }
 
-export function StatusBar({ agentOpen, onToggleAgent }: Props) {
+export function StatusBar({
+  agentOpen,
+  onToggleAgent,
+  onConnectRemote,
+  onExitRemote
+}: Props) {
   const { state, mode, dirty } = useApp()
   const cur = state.currentFile
+  const inRemote = state.workspace?.kind === 'remote'
 
   const words = useMemo(() => (cur ? countWords(cur.buffer) : 0), [cur])
 
@@ -44,6 +58,26 @@ export function StatusBar({ agentOpen, onToggleAgent }: Props) {
         </span>
       )}
       <div className="flex-1" />
+      <button
+        onClick={() => {
+          if (inRemote) void onExitRemote()
+          else void onConnectRemote()
+        }}
+        title={inRemote ? '返回本地' : '连接远程'}
+        aria-pressed={inRemote}
+        className={[
+          'no-drag p-1 rounded transition flex items-center justify-center',
+          inRemote
+            ? 'text-[var(--accent)] bg-[var(--accent-soft)]/60'
+            : 'text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]'
+        ].join(' ')}
+      >
+        {inRemote ? (
+          <Cloud className="w-3.5 h-3.5" />
+        ) : (
+          <CloudOff className="w-3.5 h-3.5" />
+        )}
+      </button>
       {onToggleAgent && (
         <button
           onClick={onToggleAgent}

@@ -194,6 +194,29 @@ export function isDirty(s: State): boolean {
   return !!s.currentFile && s.currentFile.buffer !== s.currentFile.content
 }
 
+/**
+ * Where to return when the user exits remote mode via the cloud icon.
+ * Captured at the moment we enter remote so "back" lands the user wherever
+ * they were before — a previously-open local workspace, a single file, or
+ * the home screen.
+ */
+export type LocalSnapshot =
+  | { kind: 'empty' }
+  | { kind: 'workspace'; rootPath: string }
+  | { kind: 'single'; path: string }
+
+export function captureSnapshot(s: State): LocalSnapshot {
+  if (s.workspace?.kind === 'local') {
+    return { kind: 'workspace', rootPath: s.workspace.rootPath }
+  }
+  // Only snapshot a single file if it has a path on disk — an untitled
+  // buffer can't be re-opened, so treat that as 'empty'.
+  if (s.currentFile?.path) {
+    return { kind: 'single', path: s.currentFile.path }
+  }
+  return { kind: 'empty' }
+}
+
 type Ctx = {
   state: State
   mode: AppMode
@@ -204,6 +227,9 @@ type Ctx = {
   /** Open a remote workspace. Caller must have already configured
    *  ipc.vault to a RemoteVault via switchToRemote(). */
   openRemoteAt: (serverUrl: string) => Promise<void>
+  /** Switch the active vault back to local and restore the workspace /
+   *  file the user had open before they entered remote mode. */
+  exitRemote: () => Promise<void>
   openFileAt: (path: string) => Promise<void>
   /** Open or new-file via user gesture — prompts for new-vs-current window
    *  when something is already open. */
@@ -242,6 +268,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state)
   stateRef.current = state
 
+  // Snapshot of the local workspace / file the user had open right before
+  // entering remote mode. Used by exitRemote so the cloud-icon "back"
+  // restores wherever they came from. Lives outside the reducer because
+  // it's pure UI navigation state, not workspace state.
+  const localSnapshotRef = useRef<LocalSnapshot | null>(null)
+
   // Snapshot prefs into a ref so action callbacks stay stable. When prefs
   // change, the ref updates without re-creating every callback.
   const { prefs, setPref } = usePrefs()
@@ -263,6 +295,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * pins the actual filesystem location.
    */
   const openRemoteAt = useCallback(async (serverUrl: string) => {
+    // Capture where the user was before we swap to the remote workspace,
+    // unless they are already remote (e.g. switching to a different server
+    // — keep the original snapshot so 'back' still goes to local).
+    if (stateRef.current.workspace?.kind !== 'remote') {
+      localSnapshotRef.current = captureSnapshot(stateRef.current)
+    }
     const tree = await ipc.vault.list('')
     let rootName = serverUrl
     try {
@@ -290,6 +328,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const name = path.split(/[/\\]/).pop() ?? path
     addRecent({ type: 'file', path, name })
   }, [])
+
+  /**
+   * Leave the remote workspace and restore the local snapshot we captured
+   * on entry. Unlike closeWorkspace this keeps the stored URL/token so the
+   * user can re-enter remote later without re-authenticating.
+   * No-op if we're not actually in remote mode.
+   */
+  const exitRemote = useCallback(async () => {
+    if (stateRef.current.workspace?.kind !== 'remote') return
+    const snap = localSnapshotRef.current
+    localSnapshotRef.current = null
+    // Swap the active vault back first so any subsequent ipc.vault calls
+    // (triggered by the workspace re-open below) hit the local provider.
+    switchToLocal()
+    // Clear the remote workspace before re-opening anything else — keeps
+    // the UI honest while the restore is in flight.
+    dispatch({ type: 'CLOSE_WORKSPACE' })
+    if (!snap || snap.kind === 'empty') return
+    try {
+      if (snap.kind === 'workspace') {
+        await openFolderAt(snap.rootPath)
+      } else {
+        await openFileAt(snap.path)
+      }
+    } catch (err) {
+      // Snapshot target moved/deleted while we were remote — fall back
+      // to empty so the user isn't left with a broken state.
+      // eslint-disable-next-line no-console
+      console.warn('exitRemote: failed to restore snapshot', snap, err)
+    }
+  }, [openFolderAt, openFileAt])
 
   // Direct mutation of the current window's state — used by sidebar tree
   // clicks and by main-process-initiated initial actions (no prompt).
@@ -500,6 +569,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openFile,
       openFolderAt,
       openRemoteAt,
+      exitRemote,
       openFileAt,
       openPathWithPrompt,
       newFile,
@@ -519,6 +589,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openFile,
       openFolderAt,
       openRemoteAt,
+      exitRemote,
       openFileAt,
       openPathWithPrompt,
       newFile,

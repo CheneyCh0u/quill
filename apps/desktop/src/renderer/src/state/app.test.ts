@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { reducer } from './app'
+import { captureSnapshot, reducer } from './app'
 import type { FileNode } from '../types'
 
 const baseFile = { path: '/r/a.md', content: 'old', buffer: 'old' }
@@ -111,5 +111,89 @@ describe('REFRESH_TREE', () => {
       tree: [node('a.md', '/r/a.md')]
     })
     expect(next).toEqual(before)
+  })
+})
+
+describe('captureSnapshot', () => {
+  it('captures the rootPath of an open local workspace', () => {
+    expect(
+      captureSnapshot({
+        workspace: { kind: 'local', rootPath: '/vault', rootName: 'vault', tree: [] },
+        currentFile: null,
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      })
+    ).toEqual({ kind: 'workspace', rootPath: '/vault' })
+  })
+
+  it('prefers workspace over single file when both are present', () => {
+    expect(
+      captureSnapshot({
+        workspace: { kind: 'local', rootPath: '/vault', rootName: 'vault', tree: [] },
+        currentFile: baseFile,
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      })
+    ).toEqual({ kind: 'workspace', rootPath: '/vault' })
+  })
+
+  it('captures the file path when only a single file is open', () => {
+    expect(
+      captureSnapshot({
+        workspace: null,
+        currentFile: { path: '/r/a.md', content: 'x', buffer: 'x' },
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      })
+    ).toEqual({ kind: 'single', path: '/r/a.md' })
+  })
+
+  it('returns empty when no path-backed file is open', () => {
+    expect(
+      captureSnapshot({
+        workspace: null,
+        currentFile: { path: null, content: '', buffer: 'untitled draft' },
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      })
+    ).toEqual({ kind: 'empty' })
+  })
+
+  it('returns empty when there is no workspace and no file', () => {
+    expect(
+      captureSnapshot({
+        workspace: null,
+        currentFile: null,
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      })
+    ).toEqual({ kind: 'empty' })
+  })
+
+  it('returns empty when currently in remote mode (does not snapshot remote)', () => {
+    // Guard: captureSnapshot should never store a remote workspace as the
+    // "previous local state" — the cloud-icon caller is responsible for
+    // only invoking it before entering remote, but if it slips through we
+    // want the safe fallback ('empty') instead of recording the remote URL
+    // as a local rootPath.
+    expect(
+      captureSnapshot({
+        workspace: {
+          kind: 'remote',
+          rootPath: 'https://example.com',
+          rootName: 'example.com',
+          tree: []
+        },
+        currentFile: null,
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      })
+    ).toEqual({ kind: 'empty' })
   })
 })
