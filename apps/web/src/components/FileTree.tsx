@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { FileNode } from '@quill/shared-types'
 import type { VaultProvider } from '@quill/vault-adapter'
+import { useDialogs } from '../lib/dialogs'
 import {
   detectCollisions,
   isMarkdownFile,
@@ -58,6 +59,7 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
   { vault, selectedPath, onSelect, onPathRenamed, onPathDeleted },
   ref
 ): JSX.Element {
+  const dialogs = useDialogs()
   const [root, setRoot] = useState<NodeState>({ status: 'loading' })
   // Dirs we've expanded; null means "should be expanded but not loaded yet".
   const [expanded, setExpanded] = useState<Record<string, NodeState>>({})
@@ -134,12 +136,19 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
     [reloadDir]
   )
 
-  // Ask the user for a name (prompt for v0; replace with a nicer modal later).
-  function promptForName(message: string, defaultValue = ''): string | null {
-    const value = window.prompt(message, defaultValue)
+  // Ask the user for a name via the in-app modal; null = cancelled or empty.
+  async function promptForName(
+    title: string,
+    label: string
+  ): Promise<string | null> {
+    const value = await dialogs.prompt({
+      title,
+      label,
+      placeholder: '例：notes/2026-05-26.md',
+      validate: (v) => (v.trim().length === 0 ? '名称不能为空' : null)
+    })
     if (value === null) return null
-    const trimmed = value.trim()
-    return trimmed.length === 0 ? null : trimmed
+    return value.trim()
   }
 
   // Find the "create target" directory: the selected file's parent if any,
@@ -150,7 +159,7 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
   }
 
   async function newFile(): Promise<void> {
-    const name = promptForName('文件名（可含 / 创建嵌套路径）：')
+    const name = await promptForName('新建文件', '文件名（可含 / 创建嵌套路径）')
     if (!name) return
     const dir = currentDir()
     const path = dir ? `${dir}/${name}` : name
@@ -167,12 +176,15 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
         isText: true
       })
     } catch (err) {
-      window.alert(`创建失败：${err instanceof Error ? err.message : String(err)}`)
+      void dialogs.alert({
+        title: '创建失败',
+        message: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 
   async function newFolder(): Promise<void> {
-    const name = promptForName('文件夹名（可含 / 创建嵌套目录）：')
+    const name = await promptForName('新建文件夹', '文件夹名（可含 / 创建嵌套目录）')
     if (!name) return
     const dir = currentDir()
     const path = dir ? `${dir}/${name}` : name
@@ -188,7 +200,10 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
         }))
       }
     } catch (err) {
-      window.alert(`创建失败：${err instanceof Error ? err.message : String(err)}`)
+      void dialogs.alert({
+        title: '创建失败',
+        message: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 
@@ -209,7 +224,10 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
       await reloadDir(parent)
       onPathRenamed?.(node.path, newPath)
     } catch (err) {
-      window.alert(`重命名失败：${err instanceof Error ? err.message : String(err)}`)
+      void dialogs.alert({
+        title: '重命名失败',
+        message: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 
@@ -251,7 +269,7 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
     // enforced, so the user could still pick a .txt; quietly drop it.
     const accepted = files.filter(isMarkdownFile)
     if (accepted.length === 0) {
-      window.alert('请选择 .md / .markdown 文件')
+      void dialogs.alert({ message: '请选择 .md / .markdown 文件' })
       return
     }
     const colliding = await detectCollisions(vault, destDir, accepted)
@@ -271,11 +289,14 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
 
   async function remove(node: FileNode): Promise<void> {
     setActionsForPath(null)
-    const ok = window.confirm(
-      node.isDirectory
+    const ok = await dialogs.confirm({
+      title: node.isDirectory ? '删除文件夹' : '删除文件',
+      message: node.isDirectory
         ? `删除文件夹 "${node.name}" 及其全部内容？此操作不可撤销。`
-        : `删除文件 "${node.name}"？`
-    )
+        : `删除文件 "${node.name}"？`,
+      confirmText: '删除',
+      danger: true
+    })
     if (!ok) return
     try {
       if (node.isDirectory) {
@@ -286,7 +307,10 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
       await reloadDir(parentOf(node.path))
       onPathDeleted?.(node.path)
     } catch (err) {
-      window.alert(`删除失败：${err instanceof Error ? err.message : String(err)}`)
+      void dialogs.alert({
+        title: '删除失败',
+        message: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 
