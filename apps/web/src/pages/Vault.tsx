@@ -11,12 +11,14 @@ import { Preview } from '../components/Preview'
 import { RemoteVault, UnauthorizedError } from '@quill/vault-adapter'
 import { logout } from '../lib/auth'
 import { notifyUnauthorized } from '../lib/auth-events'
+import { useDialogs } from '../lib/dialogs'
 import { useAgentSession } from '../lib/use-agent-session'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | { error: string }
 
 export function Vault(): JSX.Element {
   const navigate = useNavigate()
+  const dialogs = useDialogs()
   const vault = useMemo(
     () => new RemoteVault({ onUnauthorized: notifyUnauthorized }),
     []
@@ -149,11 +151,14 @@ export function Vault(): JSX.Element {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [dirty])
 
-  function trySwitchFile(node: FileNode): void {
+  async function trySwitchFile(node: FileNode): Promise<void> {
     if (dirty) {
-      const ok = window.confirm(
-        '当前文件有未保存的修改，确认放弃并切换？'
-      )
+      const ok = await dialogs.confirm({
+        title: '放弃未保存的修改',
+        message: '当前文件有未保存的修改，确认放弃并切换？',
+        confirmText: '放弃',
+        danger: true
+      })
       if (!ok) return
     }
     setSelected(node)
@@ -162,7 +167,15 @@ export function Vault(): JSX.Element {
   }
 
   async function onLogout(): Promise<void> {
-    if (dirty && !window.confirm('当前文件有未保存的修改，确认登出？')) return
+    if (dirty) {
+      const ok = await dialogs.confirm({
+        title: '放弃未保存的修改',
+        message: '当前文件有未保存的修改，确认登出？',
+        confirmText: '登出',
+        danger: true
+      })
+      if (!ok) return
+    }
     await logout()
     navigate('/login', { replace: true })
   }
