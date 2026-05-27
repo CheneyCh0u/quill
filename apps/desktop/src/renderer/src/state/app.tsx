@@ -88,6 +88,11 @@ const initialState: State = {
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'OPEN_WORKSPACE':
+      // Clear currentFile: switching workspaces is a coarse action, and the
+      // previously-open file almost never belongs to the new vault (local
+      // path → remote, vault A → vault B). Without this, the editor keeps
+      // rendering a stale file detached from the new tree. Refresh-in-place
+      // is a different action (REFRESH_TREE), not this one.
       return {
         ...s,
         workspace: {
@@ -96,6 +101,7 @@ export function reducer(s: State, a: Action): State {
           rootName: a.rootName,
           tree: a.tree
         },
+        currentFile: null,
         sidebarCollapsed: false
       }
     case 'CLOSE_WORKSPACE':

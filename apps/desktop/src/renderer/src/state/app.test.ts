@@ -114,6 +114,54 @@ describe('REFRESH_TREE', () => {
   })
 })
 
+describe('OPEN_WORKSPACE', () => {
+  it('clears a stale currentFile from a previous single-file or workspace mode', () => {
+    // Symptom: user previews /old/a.md, then connects to a remote vault
+    // (or opens another folder). Without clearing, the editor keeps
+    // rendering the stale file with content that doesn't belong to the
+    // newly-opened workspace.
+    const next = reducer(
+      {
+        workspace: null,
+        currentFile: baseFile,
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      },
+      {
+        type: 'OPEN_WORKSPACE',
+        kind: 'remote',
+        rootPath: 'http://example.com',
+        rootName: 'example.com',
+        tree: [node('x.md', 'x.md')]
+      }
+    )
+    expect(next.currentFile).toBeNull()
+    expect(next.workspace?.kind).toBe('remote')
+  })
+
+  it('clears currentFile when switching from one local workspace to another', () => {
+    const next = reducer(
+      {
+        workspace: { kind: 'local', rootPath: '/A', rootName: 'A', tree: [] },
+        currentFile: { path: '/A/notes.md', content: 'A notes', buffer: 'A notes' },
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      },
+      {
+        type: 'OPEN_WORKSPACE',
+        kind: 'local',
+        rootPath: '/B',
+        rootName: 'B',
+        tree: [node('b.md', '/B/b.md')]
+      }
+    )
+    expect(next.currentFile).toBeNull()
+    expect(next.workspace?.rootPath).toBe('/B')
+  })
+})
+
 describe('captureSnapshot', () => {
   it('captures the rootPath of an open local workspace', () => {
     expect(
