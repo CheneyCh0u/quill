@@ -1,4 +1,4 @@
-import { resolve as resolvePath } from 'node:path'
+import { resolve as resolvePath, sep } from 'node:path'
 
 /**
  * Thrown when a user-supplied path would escape the vault. Carries the
@@ -32,7 +32,10 @@ export function resolveInVault(vaultRoot: string, userPath: string): string {
   // would jump straight to /etc/passwd.
   const trimmed = userPath.replace(/^\/+/, '')
   const abs = resolvePath(root, trimmed)
-  if (abs !== root && !abs.startsWith(root + '/')) {
+  // Use the platform separator, not a literal '/': on Windows resolvePath
+  // returns '\'-separated paths, so `root + '/'` would never match a legit
+  // child and every path would falsely "escape the vault".
+  if (abs !== root && !abs.startsWith(root + sep)) {
     throw new PathGuardError(userPath)
   }
   return abs
