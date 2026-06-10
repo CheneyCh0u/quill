@@ -15,7 +15,7 @@ import { useSync } from '../state/sync'
 import { usePrefs } from '../state/prefs'
 import { ipc } from '../lib/ipc'
 import { SYNC_STATUS_LABELS } from '../lib/syncSummary'
-import type { SyncEntry, SyncSpace } from '../types'
+import type { SyncEntry, Workspace } from '../types'
 
 function entryGlyph(e: SyncEntry): React.ReactNode {
   switch (e.status) {
@@ -78,7 +78,7 @@ export function SyncPopover({ onClose }: { onClose: () => void }) {
 
   const [remotePath, setRemotePath] = useState(rootName)
   const [view, setView] = useState<'main' | 'bind'>('main')
-  const [spaces, setSpaces] = useState<SyncSpace[] | null>(null)
+  const [spaces, setSpaces] = useState<Workspace[] | null>(null)
   const [confirmingDisable, setConfirmingDisable] = useState(false)
 
   // Re-check when the panel opens so the list is fresh.
@@ -133,7 +133,7 @@ export function SyncPopover({ onClose }: { onClose: () => void }) {
         <>
           <div className="px-4 pt-4 pb-2">
             <div className="font-medium text-[13px] text-[var(--ink)] mb-1">
-              服务器上的同步空间
+              云端工作区
             </div>
             <p className="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)]">
               绑定后会把云端内容拉取到当前文件夹。
@@ -146,7 +146,7 @@ export function SyncPopover({ onClose }: { onClose: () => void }) {
               </div>
             ) : spaces.length === 0 ? (
               <p className="px-2 py-3 font-serif-zh italic text-[11.5px] text-[var(--ink-faint)]">
-                服务器上还没有同步空间。
+                服务器上还没有云端工作区。
               </p>
             ) : (
               spaces.map((s) => (
@@ -211,7 +211,7 @@ export function SyncPopover({ onClose }: { onClose: () => void }) {
               onClick={() => void loadSpaces()}
               className="underline decoration-[var(--ink-ghost)] hover:text-[var(--ink)]"
             >
-              绑定服务器上已有的同步空间…
+              绑定已有的云端工作区…
             </button>
           </p>
         </div>

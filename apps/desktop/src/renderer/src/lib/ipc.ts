@@ -124,7 +124,7 @@ export const ipc = {
     status: (root: string) => window.quill.sync.status(root),
     enable: (args: { root: string; name: string; remotePath: string }) =>
       window.quill.sync.enable(args),
-    bind: (args: { root: string; space: import('@quill/shared-types').SyncSpace }) =>
+    bind: (args: { root: string; space: import('@quill/shared-types').Workspace }) =>
       window.quill.sync.bind(args),
     push: (root: string) => window.quill.sync.push(root),
     pull: (root: string) => window.quill.sync.pull(root),

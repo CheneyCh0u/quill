@@ -24,7 +24,7 @@ export type {
   SyncBinding,
   SyncEntry,
   SyncSnapshot,
-  SyncSpace,
+  Workspace,
   SyncStatus,
   ToolCallPart,
   ToolResultOutput,

@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
-import type { SyncSnapshot, SyncSpace } from '@quill/shared-types'
+import type { SyncSnapshot, Workspace } from '@quill/shared-types'
 import { computeSyncPlan, type HashMap } from './plan'
 import { buildLocalIndex } from './local-index'
 import { readSyncFile, writeSyncFile, removeSyncFile, type SyncFile } from './bind-store'
@@ -31,7 +31,7 @@ class HttpError extends Error {
 }
 
 function oldServerError(): Error {
-  return new Error('服务器版本过旧（缺少 /api/sync/spaces），请更新服务端部署后重试')
+  return new Error('服务器版本过旧（缺少 /api/workspaces），请更新服务端部署后重试')
 }
 
 function api(cfg: RemoteConfig) {
@@ -80,27 +80,27 @@ function api(cfg: RemoteConfig) {
       if (!r.ok) throw new HttpError(r.status, await r.text())
       return true
     },
-    async listSpaces(): Promise<SyncSpace[]> {
-      const r = await doFetch(`${base}/api/sync/spaces`, { headers: headers() })
+    async listSpaces(): Promise<Workspace[]> {
+      const r = await doFetch(`${base}/api/workspaces`, { headers: headers() })
       // Old deployments lack this route; their SPA fallback answers GET
       // with index.html (200, text/html) and POST with a bare 404.
       if (r.headers.get('Content-Type')?.includes('text/html')) throw oldServerError()
       if (r.status === 404) throw oldServerError()
       if (!r.ok) throw new HttpError(r.status, await r.text())
-      return (await r.json()) as SyncSpace[]
+      return (await r.json()) as Workspace[]
     },
-    async createSpace(name: string, remotePath: string): Promise<SyncSpace> {
-      const r = await doFetch(`${base}/api/sync/spaces`, {
+    async createSpace(name: string, remotePath: string): Promise<Workspace> {
+      const r = await doFetch(`${base}/api/workspaces`, {
         method: 'POST',
         headers: headers({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ name, remotePath })
       })
       if (r.status === 404) throw oldServerError()
       if (!r.ok) throw new HttpError(r.status, await r.text())
-      return (await r.json()) as SyncSpace
+      return (await r.json()) as Workspace
     },
     async deleteSpace(id: string): Promise<void> {
-      const r = await doFetch(`${base}/api/sync/spaces/${encodeURIComponent(id)}`, {
+      const r = await doFetch(`${base}/api/workspaces/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: headers()
       })
@@ -162,7 +162,7 @@ export async function checkStatus(root: string, cfg: RemoteConfig): Promise<Sync
   return snapshotFor(root, cfg, bound)
 }
 
-export async function listSpaces(cfg: RemoteConfig): Promise<SyncSpace[]> {
+export async function listSpaces(cfg: RemoteConfig): Promise<Workspace[]> {
   return api(cfg).listSpaces()
 }
 
@@ -187,7 +187,7 @@ export async function enableSync(
 export async function bindSpace(
   root: string,
   cfg: RemoteConfig,
-  space: SyncSpace
+  space: Workspace
 ): Promise<SyncSnapshot> {
   const bound: SyncFile = {
     spaceId: space.id,

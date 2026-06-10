@@ -312,7 +312,7 @@ export function registerIpc(): void {
   )
   ipcMain.handle(
     'sync:bind',
-    async (_evt, args: { root: string; space: import('@quill/shared-types').SyncSpace }) =>
+    async (_evt, args: { root: string; space: import('@quill/shared-types').Workspace }) =>
       bindSpace(args.root, await requireCfg(), args.space)
   )
   ipcMain.handle('sync:push', async (_evt, root: string) =>
