@@ -24,6 +24,14 @@ export {
 } from './themes'
 export type { ThemeDef, ThemeMode, ThemePref, ThemeTokens, BuiltinThemeId } from './themes'
 
+export type {
+  SyncStatus,
+  SyncEntry,
+  SyncSpace,
+  SyncBinding,
+  SyncSnapshot
+} from './sync'
+
 // ============================================================
 // File system
 // ============================================================
