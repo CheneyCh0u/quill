@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Agent 会话 · 设计稿 — Quill</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Geist:wght@300..700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:oklch(0.974 0.012 86); --paper-dim:oklch(0.952 0.014 84);
+    --paper-soft:oklch(0.928 0.016 80); --paper-edge:oklch(0.892 0.018 76);
+    --ink:oklch(0.225 0.018 50); --ink-soft:oklch(0.42 0.014 50);
+    --ink-faint:oklch(0.62 0.010 50); --ink-ghost:oklch(0.78 0.008 50);
+    --rule:oklch(0.88 0.014 75); --rule-soft:oklch(0.92 0.012 78);
+    --accent:oklch(0.55 0.16 28); --accent-soft:oklch(0.93 0.04 35);
+    --ok:oklch(0.66 0.13 145);
+  }
+  .dark-theme{
+    --paper:oklch(0.178 0.012 248); --paper-dim:oklch(0.206 0.012 248);
+    --paper-soft:oklch(0.238 0.014 250); --paper-edge:oklch(0.282 0.015 250);
+    --ink:oklch(0.924 0.008 80); --ink-soft:oklch(0.74 0.008 80);
+    --ink-faint:oklch(0.54 0.008 80); --ink-ghost:oklch(0.40 0.008 80);
+    --rule:oklch(0.30 0.012 248); --rule-soft:oklch(0.26 0.012 248);
+    --accent:oklch(0.78 0.14 40); --accent-soft:oklch(0.30 0.08 35);
+    --ok:oklch(0.72 0.13 145);
+  }
+  body{ background:var(--paper); color:var(--ink); font-family:"Geist","Noto Serif SC",system-ui,sans-serif; }
+  .font-display{ font-family:"Fraunces","Noto Serif SC",Georgia,serif; }
+  .font-serif-zh{ font-family:"Noto Serif SC","Fraunces",Georgia,serif; }
+  .mono{ font-family:"JetBrains Mono",Menlo,monospace; }
+  .pop-shadow{ box-shadow:0 8px 28px oklch(0 0 0 / 0.14), 0 2px 6px oklch(0 0 0 / 0.08); }
+  svg{ flex-shrink:0; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></g></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></g></symbol>
+  <symbol id="i-msgs" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="max-w-[1080px] mx-auto px-8 pt-12 pb-8 flex items-end justify-between">
+  <div>
+    <p class="font-display italic text-[13px] text-[var(--ink-faint)] mb-1">Quill · 设计稿 · 2026-06</p>
+    <h1 class="font-display text-[40px] leading-tight" style="font-weight:500">Agent 会话</h1>
+    <p class="font-serif-zh italic text-[14px] text-[var(--ink-soft)] mt-2 max-w-[660px]">
+      「清空」退役。同一工作区 / 文件下可以开多个会话，上下文按会话隔离；
+      header 用「会话标题 + 下拉」管理（Cursor / Copilot Chat 范式），标题取首条提问。
+    </p>
+  </div>
+  <button onclick="document.documentElement.classList.toggle('dark-theme')"
+    class="px-3 py-1.5 rounded-md border border-[var(--rule)] text-[12px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)] transition">浅 / 深</button>
+</header>
+
+<main class="max-w-[1080px] mx-auto px-8 pb-24 space-y-16">
+
+<!-- §1 桌面端 -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">1 · 桌面端面板头部</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    现状 header：Agent 字标 ＋ 导出 ＋ 清空 ＋ 关闭。改为：<b>会话标题（可点，带 chevron）</b>占据字标位，
+    右侧「＋ 新建会话」icon、导出（保留）、关闭。清空按钮移除。
+  </p>
+
+  <div class="flex gap-8 items-start flex-wrap">
+    <!-- a 收起态 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">a · 常态 — 标题即会话切换入口</p>
+      <div class="w-[360px] border border-[var(--rule)] rounded-lg bg-[var(--paper-dim)] overflow-hidden">
+        <div class="h-11 px-4 flex items-center gap-2 border-b border-[var(--rule)] bg-[var(--paper)]">
+          <button class="flex items-center gap-1.5 min-w-0 px-1.5 py-1 -ml-1.5 rounded-md hover:bg-[var(--paper-soft)] group">
+            <span class="font-display italic text-[14px] text-[var(--ink)] truncate">帮我整理 LangGraph 的核心概念</span>
+            <svg width="11" height="11" class="text-[var(--ink-faint)]"><use href="#i-chevron"/></svg>
+          </button>
+          <div class="flex-1"></div>
+          <button class="p-1.5 rounded-md text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]" title="新建会话"><svg width="15" height="15"><use href="#i-plus"/></svg></button>
+          <button class="p-1.5 rounded-md text-[var(--ink-faint)]" title="导出为 markdown"><svg width="15" height="15"><use href="#i-download"/></svg></button>
+          <button class="p-1.5 rounded-md text-[var(--ink-faint)]" title="关闭 (⌘J)"><svg width="15" height="15"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="px-4 py-2 border-b border-[var(--rule-soft)] flex items-center gap-3 text-[11px] text-[var(--ink-faint)]">
+          <span>workspace · my-notes</span><span class="text-[var(--ink-ghost)]">·</span><span class="mono">claude-sonnet-4-6</span>
+        </div>
+        <div class="px-4 py-6 text-[12px] text-[var(--ink-ghost)] font-serif-zh italic">…对话内容…</div>
+      </div>
+    </div>
+
+    <!-- b 下拉展开 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">b · 点标题 → 会话下拉（当前 scope 下的全部会话）</p>
+      <div class="relative w-[360px] border border-[var(--rule)] rounded-lg bg-[var(--paper-dim)]" style="height:300px">
+        <div class="h-11 px-4 flex items-center gap-2 border-b border-[var(--rule)] bg-[var(--paper)] rounded-t-lg">
+          <button class="flex items-center gap-1.5 min-w-0 px-1.5 py-1 -ml-1.5 rounded-md bg-[var(--paper-soft)]">
+            <span class="font-display italic text-[14px] text-[var(--ink)] truncate">帮我整理 LangGraph 的核心概念</span>
+            <svg width="11" height="11" class="text-[var(--ink-faint)] rotate-180"><use href="#i-chevron"/></svg>
+          </button>
+          <div class="flex-1"></div>
+          <button class="p-1.5 text-[var(--ink-faint)]"><svg width="15" height="15"><use href="#i-plus"/></svg></button>
+          <button class="p-1.5 text-[var(--ink-faint)]"><svg width="15" height="15"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="absolute left-3 right-3 top-11 mt-1 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px] z-10">
+          <p class="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">sessions · my-notes</p>
+          <div class="px-1.5 pb-1 space-y-px max-h-52 overflow-auto">
+            <!-- 当前 -->
+            <div class="px-2 py-1.5 rounded-md bg-[var(--paper-soft)] flex items-center gap-2 group">
+              <div class="flex-1 min-w-0">
+                <div class="text-[12px] text-[var(--ink)] truncate">帮我整理 LangGraph 的核心概念</div>
+                <div class="text-[10.5px] text-[var(--ink-faint)]">14:32 · 6 轮</div>
+              </div>
+              <svg width="13" height="13" class="text-[var(--accent)]"><use href="#i-check"/></svg>
+            </div>
+            <!-- hover 态：行尾出现删除 -->
+            <div class="px-2 py-1.5 rounded-md bg-[var(--paper-soft)]/50 flex items-center gap-2 cursor-pointer">
+              <div class="flex-1 min-w-0">
+                <div class="text-[12px] text-[var(--ink-soft)] truncate">review 一下 docs/plan.md 的结构</div>
+                <div class="text-[10.5px] text-[var(--ink-faint)]">昨天 · 11 轮</div>
+              </div>
+              <button class="p-1 rounded text-[var(--ink-ghost)] hover:text-[var(--accent)]" title="删除会话"><svg width="12" height="12"><use href="#i-trash"/></svg></button>
+            </div>
+            <!-- 删除确认态（替换行内容） -->
+            <div class="px-2 py-1.5 rounded-md bg-[var(--accent-soft)]/40 flex items-center gap-2">
+              <span class="flex-1 font-serif-zh italic text-[11.5px] text-[var(--ink-soft)] truncate">删除「写一篇关于 RAG 的草稿」？</span>
+              <button class="text-[11px] text-[var(--accent)] hover:underline shrink-0">删除</button>
+              <button class="text-[11px] text-[var(--ink-faint)] hover:text-[var(--ink)] shrink-0">取消</button>
+            </div>
+            <!-- 普通 -->
+            <div class="px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 cursor-pointer">
+              <div class="flex-1 min-w-0">
+                <div class="text-[12px] text-[var(--ink-soft)] truncate">新会话</div>
+                <div class="text-[10.5px] text-[var(--ink-faint)]">06-08 · 空</div>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-[var(--rule-soft)] px-1.5 py-1">
+            <button class="w-full px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 text-[var(--ink-soft)] hover:text-[var(--ink)]">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>新建会话
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="font-serif-zh italic text-[12px] text-[var(--ink-faint)] mt-4 max-w-[700px]">
+    规则：标题 = 首条提问截断（24 字符），没发过消息显示「新会话」；列表按最近使用排序；
+    删除行内二次确认，不弹全局对话框；删除当前会话 → 自动切到最近一个，一个都不剩则自动建新空会话
+    （面板永远有一个活动会话，这就是为什么「清空」可以退役：新建会话 = 旧清空，且老对话还能找回来）。
+  </p>
+</section>
+
+<!-- §2 web 端 -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">2 · Web 端（PC 侧栏 + H5 全屏 sheet）</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    PanelShell header：连接状态点 ＋ 模型选择器保持不动，「清空」位置换成「会话」按钮（标题过长时只显示
+    icon ＋ chevron），下拉同款。H5 下拉宽度铺满、行高 ≥44px 触控友好。
+  </p>
+
+  <div class="flex gap-8 items-start flex-wrap">
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">a · PC（md+，384px 侧栏）</p>
+      <div class="relative w-96 border border-[var(--rule)] rounded-lg bg-[var(--paper)]" style="height:280px">
+        <div class="h-12 flex items-center gap-2 px-3 border-b border-[var(--rule-soft)]">
+          <span class="w-2 h-2 rounded-full bg-[var(--ok)]"></span>
+          <span class="text-[12px] text-[var(--ink-soft)] mono">claude-sonnet-4-6</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-[var(--paper-soft)] text-[var(--ink-faint)]">128k</span>
+          <div class="flex-1"></div>
+          <button class="flex items-center gap-1 px-2 py-1 rounded text-[12px] bg-[var(--paper-soft)] text-[var(--ink)]">
+            <svg width="12" height="12" class="text-[var(--ink-faint)]"><use href="#i-msgs"/></svg>
+            会话
+            <svg width="10" height="10" class="text-[var(--ink-faint)] rotate-180"><use href="#i-chevron"/></svg>
+          </button>
+          <button class="px-2 text-[var(--ink-faint)]">✕</button>
+        </div>
+        <div class="absolute right-3 left-3 top-12 mt-1 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[13px] z-10">
+          <p class="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">sessions · quill</p>
+          <div class="px-1.5 pb-1 space-y-px">
+            <div class="px-2 py-2 rounded-md bg-[var(--paper-soft)] flex items-center gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="text-[13px] text-[var(--ink)] truncate">总结 h.md 的要点</div>
+                <div class="text-[11px] text-[var(--ink-faint)]">10:08 · 3 轮</div>
+              </div>
+              <svg width="13" height="13" class="text-[var(--accent)]"><use href="#i-check"/></svg>
+            </div>
+            <div class="px-2 py-2 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="text-[13px] text-[var(--ink-soft)] truncate">把这份笔记翻译成英文</div>
+                <div class="text-[11px] text-[var(--ink-faint)]">06-09 · 8 轮</div>
+              </div>
+              <button class="p-1.5 rounded text-[var(--ink-ghost)] hover:text-[var(--accent)]"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+          <div class="border-t border-[var(--rule-soft)] px-1.5 py-1">
+            <button class="w-full min-h-[40px] px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 text-[var(--ink-soft)]">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>新建会话
+            </button>
+          </div>
+        </div>
+        <div class="px-3 pt-28 pb-3 text-[12px] text-[var(--ink-ghost)] font-serif-zh italic">…对话内容…</div>
+      </div>
+    </div>
+
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">b · H5（375px 全屏 sheet）— 行高 ≥44px</p>
+      <div class="relative w-[375px] border border-[var(--rule)] rounded-lg bg-[var(--paper)] overflow-hidden" style="height:280px">
+        <div class="h-12 flex items-center gap-2 px-3 border-b border-[var(--rule-soft)]">
+          <span class="w-2 h-2 rounded-full bg-[var(--ok)]"></span>
+          <span class="text-[12px] text-[var(--ink-soft)] mono truncate">gpt-5.2</span>
+          <div class="flex-1"></div>
+          <button class="flex items-center gap-1 px-2.5 py-1.5 rounded text-[13px] bg-[var(--paper-soft)] text-[var(--ink)]">
+            <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-msgs"/></svg>
+            <svg width="10" height="10" class="text-[var(--ink-faint)] rotate-180"><use href="#i-chevron"/></svg>
+          </button>
+          <button class="px-2 text-[var(--ink-faint)] text-lg">✕</button>
+        </div>
+        <div class="absolute inset-x-2 top-12 mt-1 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[14px] z-10">
+          <p class="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">sessions · quill</p>
+          <div class="px-1.5 pb-1 space-y-px">
+            <div class="min-h-[44px] px-2.5 py-2 rounded-md bg-[var(--paper-soft)] flex items-center gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="truncate text-[var(--ink)]">总结 h.md 的要点</div>
+                <div class="text-[11px] text-[var(--ink-faint)]">10:08 · 3 轮</div>
+              </div>
+              <svg width="14" height="14" class="text-[var(--accent)]"><use href="#i-check"/></svg>
+            </div>
+            <div class="min-h-[44px] px-2.5 py-2 rounded-md flex items-center gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="truncate text-[var(--ink-soft)]">把这份笔记翻译成英文</div>
+                <div class="text-[11px] text-[var(--ink-faint)]">06-09 · 8 轮</div>
+              </div>
+              <button class="p-2 rounded text-[var(--ink-ghost)]"><svg width="15" height="15"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+          <div class="border-t border-[var(--rule-soft)] px-1.5 py-1">
+            <button class="w-full min-h-[44px] px-2.5 rounded-md flex items-center gap-2 text-[var(--ink-soft)]">
+              <svg width="13" height="13"><use href="#i-plus"/></svg>新建会话
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- §3 数据与行为 -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">3 · 隔离模型与数据落点（实现约定）</h2>
+  <div class="grid grid-cols-3 gap-4 text-[12.5px] mt-4 mb-6">
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] mb-1.5">① 会话归属 scope</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        会话挂在现有 scope（桌面：workspace / file；web：当前云端工作区）之下。
+        切 scope 看到的是各自的会话列表，互不可见——延续现有上下文按 scope 隔离的语义，往下再切一层。
+      </p>
+    </div>
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] mb-1.5">② 桌面端存储</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        现状 <span class="mono text-[11px]">~/.quill/contexts/&lt;scopeKey&gt;.json</span>（单文件 = 单对话）
+        → <span class="mono text-[11px]">contexts/&lt;scopeKey&gt;/&lt;sessionId&gt;.json</span> ＋
+        目录内 <span class="mono text-[11px]">index.json</span>（标题/时间/轮数/活动会话）。
+        启动时发现旧单文件 → 自动迁移成该 scope 的第一个会话，老对话不丢。
+      </p>
+    </div>
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] mb-1.5">③ web 端存储</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        现状 localStorage 单 key → <span class="mono text-[11px]">quill:agent:&lt;workspaceId&gt;:&lt;sessionId&gt;</span>
+        ＋ 会话索引 key。同样自动迁移旧 key 为第一个会话。
+        （跨端会话同步不在本期：桌面 agent 本地跑、web agent 服务端跑，历史本就不互通。）
+      </p>
+    </div>
+  </div>
+  <ul class="space-y-2 text-[12.5px] text-[var(--ink-soft)] list-none max-w-[720px]">
+    <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">01</span>
+      新建会话 = 旧「清空」的替代：当前对话原样留在列表里，新会话空白起步。运行中（agent 正在跑）禁用切换/新建/删除，先取消或等结束。</li>
+    <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">02</span>
+      删除会话：行内二次确认；删除的是磁盘/localStorage 里的上下文，不可恢复。删当前 → 切最近；删到空 → 自动建新空会话。</li>
+    <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">03</span>
+      自动压缩、token 预算、审批流等现有机制不变，全部作用于「当前会话」。导出 markdown 导出当前会话。</li>
+    <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">04</span>
+      web 端切云端工作区时，面板加载该工作区的活动会话（之前是 reset；现在变成「回到那个工作区的上次会话」，体验更顺）。</li>
+  </ul>
+</section>
+
+</main>
+
+<footer class="max-w-[1080px] mx-auto px-8 pb-16">
+  <p class="font-serif-zh italic text-[12px] text-[var(--ink-ghost)] border-t border-[var(--rule-soft)] pt-4">
+    Quill · agent-sessions.html · 与 sync.html / cloud-workspaces.html 同一套 token
+  </p>
+</footer>
+
+</body>
+</html>
