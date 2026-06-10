@@ -3,6 +3,7 @@ import { Cloud, CloudOff, Sparkles } from 'lucide-react'
 import { useApp } from '../state/app'
 import { countWords } from '../lib/markdown'
 import { ThemeToggle } from './ThemeToggle'
+import { SyncIndicator } from './SyncIndicator'
 
 type Props = {
   agentOpen: boolean
@@ -58,6 +59,7 @@ export function StatusBar({
         </span>
       )}
       <div className="flex-1" />
+      <SyncIndicator />
       <button
         onClick={() => {
           if (inRemote) void onExitRemote()

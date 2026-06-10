@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AppProvider, useApp } from './state/app'
 import { ThemeProvider } from './state/theme'
 import { PrefsProvider } from './state/prefs'
+import { SyncProvider } from './state/sync'
 import { Sidebar } from './components/Sidebar'
 import { RightPane } from './components/RightPane'
 import { EmptyState } from './components/EmptyState'
@@ -135,7 +136,9 @@ export default function App() {
     <ThemeProvider>
       <PrefsProvider>
         <AppProvider>
-          <Shell />
+          <SyncProvider>
+            <Shell />
+          </SyncProvider>
         </AppProvider>
       </PrefsProvider>
     </ThemeProvider>

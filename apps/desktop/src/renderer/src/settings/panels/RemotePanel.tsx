@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CloudOff, Loader2 } from 'lucide-react'
+import { CloudOff, Folder, Loader2, X } from 'lucide-react'
 import { ipc } from '../../lib/ipc'
+import { usePrefs, type AutoSyncInterval } from '../../state/prefs'
+import { PillGroup, Row, Toggle } from './controls'
+import type { SyncSpace } from '../../types'
 
 /**
  * Settings panel for the saved remote-vault connection.
@@ -201,6 +204,140 @@ export function RemotePanel() {
           )}
         </div>
       </div>
+
+      <SyncSection serverConfigured={!!savedUrl && hasToken} />
+    </div>
+  )
+}
+
+const INTERVAL_OPTIONS: Array<{ value: AutoSyncInterval; label: string }> = [
+  { value: 1, label: '1 分钟' },
+  { value: 5, label: '5 分钟' },
+  { value: 15, label: '15 分钟' },
+  { value: 30, label: '30 分钟' }
+]
+
+/**
+ * Folder-workspace cloud sync settings. The auto-sync switch + interval
+ * are device-level prefs (localStorage, picked up by the main window via
+ * the storage event); the space list reads the server registry.
+ */
+function SyncSection({ serverConfigured }: { serverConfigured: boolean }) {
+  const { prefs, setPref } = usePrefs()
+  const [spaces, setSpaces] = useState<SyncSpace[] | null>(null)
+  const [spacesError, setSpacesError] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
+
+  const loadSpaces = useCallback(async () => {
+    if (!serverConfigured) return
+    setSpacesError(null)
+    try {
+      setSpaces(await ipc.sync.spaces())
+    } catch (err) {
+      setSpaces([])
+      setSpacesError(err instanceof Error ? err.message : String(err))
+    }
+  }, [serverConfigured])
+
+  useEffect(() => {
+    void loadSpaces()
+  }, [loadSpaces])
+
+  const handleRemove = useCallback(
+    async (id: string) => {
+      setRemoving(id)
+      try {
+        await ipc.sync.removeSpace(id)
+        await loadSpaces()
+      } catch (err) {
+        setSpacesError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setRemoving(null)
+      }
+    },
+    [loadSpaces]
+  )
+
+  return (
+    <div className="mt-10">
+      <h3 className="font-display text-[20px] text-[var(--ink)] mb-1" style={{ fontWeight: 500 }}>
+        同步
+      </h3>
+      <p className="font-serif-zh italic text-[12.5px] text-[var(--ink-faint)] mb-4">
+        文件夹工作区 ↔ 云端 vault
+      </p>
+
+      <Row label="自动同步" hint="仅推拉无冲突的改动">
+        <div className="pt-1">
+          <Toggle checked={prefs.autoSync} onChange={(v) => setPref('autoSync', v)} />
+        </div>
+      </Row>
+
+      <Row label="同步间隔" hint="检查并同步的周期">
+        <PillGroup
+          options={INTERVAL_OPTIONS}
+          value={prefs.autoSyncIntervalMin}
+          onChange={(v) => setPref('autoSyncIntervalMin', v)}
+        />
+        <p className="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)] mt-2">
+          冲突永远不会被自动覆盖，需要在主窗口的同步面板里手动处理。
+        </p>
+      </Row>
+
+      <Row label="同步空间" hint="记录在服务器，跨设备可见">
+        {!serverConfigured ? (
+          <p className="font-serif-zh italic text-[12px] text-[var(--ink-faint)] pt-1.5">
+            配置并连接服务器后可见。
+          </p>
+        ) : spaces === null ? (
+          <p className="flex items-center gap-2 text-[12px] text-[var(--ink-faint)] pt-1.5">
+            <Loader2 className="w-3 h-3 animate-spin" /> 加载中…
+          </p>
+        ) : spaces.length === 0 ? (
+          <p className="font-serif-zh italic text-[12px] text-[var(--ink-faint)] pt-1.5">
+            还没有文件夹开启同步。在主窗口状态栏点击同步图标即可开启。
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {spaces.map((s) => (
+              <div
+                key={s.id}
+                className="px-3 py-2 rounded-md border border-[var(--rule-soft)] bg-[var(--paper-dim)] flex items-center gap-2.5"
+              >
+                <Folder className="w-3.5 h-3.5 text-[var(--ink-faint)] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12.5px] text-[var(--ink)] truncate">
+                    {s.name}{' '}
+                    <span className="font-mono text-[10.5px] text-[var(--ink-faint)]">
+                      → /{s.remotePath}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => void handleRemove(s.id)}
+                  disabled={removing !== null}
+                  title="解除同步记录（不删任何文件）"
+                  className="p-1 rounded text-[var(--ink-ghost)] hover:text-[var(--accent)] disabled:opacity-50 transition"
+                >
+                  {removing === s.id ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <X className="w-3 h-3" />
+                  )}
+                </button>
+              </div>
+            ))}
+            <p className="font-serif-zh italic text-[11px] text-[var(--ink-faint)] pt-1">
+              解除同步只移除服务器上的记录，本地与云端文件都不会被删除。
+            </p>
+          </div>
+        )}
+        {spacesError && (
+          <p className="font-serif-zh italic text-[11.5px] text-[var(--accent)] mt-1.5 break-all">
+            {spacesError}
+          </p>
+        )}
+      </Row>
     </div>
   )
 }

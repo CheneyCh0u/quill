@@ -19,13 +19,22 @@ export type Prefs = {
    *  Updated to whatever the user picks in the save dialog so subsequent
    *  new files default to the same kind. */
   lastNewFileExt: string
+  /** Auto-sync sync-enabled folder workspaces in the background.
+   *  Conflicts are never auto-resolved. */
+  autoSync: boolean
+  /** Minutes between auto-sync passes. */
+  autoSyncIntervalMin: AutoSyncInterval
 }
+
+export type AutoSyncInterval = 1 | 5 | 15 | 30
 
 const DEFAULTS: Prefs = {
   fontSize: 14,
   defaultViewMode: 'split',
   showLineNumbers: true,
-  lastNewFileExt: 'md'
+  lastNewFileExt: 'md',
+  autoSync: false,
+  autoSyncIntervalMin: 5
 }
 
 const STORAGE_KEY = 'quill:prefs'
@@ -57,7 +66,16 @@ function readStored(): Prefs {
         /^[a-z0-9]+$/i.test(parsed.lastNewFileExt) &&
         parsed.lastNewFileExt.length <= 12
           ? parsed.lastNewFileExt.toLowerCase()
-          : DEFAULTS.lastNewFileExt
+          : DEFAULTS.lastNewFileExt,
+      autoSync:
+        typeof parsed.autoSync === 'boolean' ? parsed.autoSync : DEFAULTS.autoSync,
+      autoSyncIntervalMin:
+        parsed.autoSyncIntervalMin === 1 ||
+        parsed.autoSyncIntervalMin === 5 ||
+        parsed.autoSyncIntervalMin === 15 ||
+        parsed.autoSyncIntervalMin === 30
+          ? parsed.autoSyncIntervalMin
+          : DEFAULTS.autoSyncIntervalMin
     }
   } catch {
     return { ...DEFAULTS }
