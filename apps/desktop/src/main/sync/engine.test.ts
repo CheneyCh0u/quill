@@ -282,6 +282,31 @@ describe('sync engine', () => {
     ])
   })
 
+  test('a server without the sync-spaces API reads as "server too old"', async () => {
+    // Old deployments 404 on /api/sync/spaces (the SPA fallback even
+    // serves HTML on GET). Surface that as an actionable message, not
+    // a bare "404: 404 Not Found".
+    const root = await freshRoot()
+    const oldServer: FetchLike = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(String(input), init)
+      if (new URL(req.url).pathname.startsWith('/api/sync/spaces')) {
+        if (req.method === 'GET') {
+          return new Response('<!doctype html>', {
+            headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+          })
+        }
+        return Response.json({ error: 'not found' }, { status: 404 })
+      }
+      return Response.json([], { status: 200 })
+    }
+    const cfg: RemoteConfig = { serverUrl: 'https://old.test', token: 't', fetchFn: oldServer }
+
+    await expect(enableSync(root, cfg, { name: 'n', remotePath: 'n' })).rejects.toThrow(
+      /服务器版本过旧/
+    )
+    await expect(listSpaces(cfg)).rejects.toThrow(/服务器版本过旧/)
+  })
+
   test('checkStatus reports offline when the server is unreachable', async () => {
     const root = await freshRoot()
     const server = fakeServer()

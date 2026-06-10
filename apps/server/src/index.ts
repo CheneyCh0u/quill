@@ -94,6 +94,12 @@ try {
 if (webDistAvailable) {
   app.get('/*', async (c) => {
     const url = new URL(c.req.url)
+    // Unknown /api/* paths must 404 as JSON, never fall through to the
+    // SPA shell — an HTML 200 on an API route masks "this server build
+    // doesn't have that endpoint yet" from clients and debuggers.
+    if (url.pathname.startsWith('/api/')) {
+      return c.json({ error: 'not found' }, 404)
+    }
     // Strip leading slash; default to index.html for the root.
     const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1)
     const candidate = join(WEB_DIST, requested)

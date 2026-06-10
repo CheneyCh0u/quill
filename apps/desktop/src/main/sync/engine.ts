@@ -30,6 +30,10 @@ class HttpError extends Error {
   }
 }
 
+function oldServerError(): Error {
+  return new Error('服务器版本过旧（缺少 /api/sync/spaces），请更新服务端部署后重试')
+}
+
 function api(cfg: RemoteConfig) {
   const doFetch = cfg.fetchFn ?? fetch
   const base = cfg.serverUrl.replace(/\/+$/, '')
@@ -78,6 +82,10 @@ function api(cfg: RemoteConfig) {
     },
     async listSpaces(): Promise<SyncSpace[]> {
       const r = await doFetch(`${base}/api/sync/spaces`, { headers: headers() })
+      // Old deployments lack this route; their SPA fallback answers GET
+      // with index.html (200, text/html) and POST with a bare 404.
+      if (r.headers.get('Content-Type')?.includes('text/html')) throw oldServerError()
+      if (r.status === 404) throw oldServerError()
       if (!r.ok) throw new HttpError(r.status, await r.text())
       return (await r.json()) as SyncSpace[]
     },
@@ -87,6 +95,7 @@ function api(cfg: RemoteConfig) {
         headers: headers({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ name, remotePath })
       })
+      if (r.status === 404) throw oldServerError()
       if (!r.ok) throw new HttpError(r.status, await r.text())
       return (await r.json()) as SyncSpace
     },
