@@ -5,6 +5,7 @@ import { cors } from 'hono/cors'
 import { loadConfig } from './config'
 import { createAuthRoutes } from './auth-routes'
 import { createVaultRoutes } from './vault'
+import { createSyncSpaceRoutes } from './sync-spaces'
 import { createAgentRoutes } from './agent'
 import { ProvidersStore } from './providers-store'
 import { requireSession } from './auth'
@@ -61,6 +62,13 @@ const vaultApp = new Hono()
 vaultApp.use('*', requireSession(config.auth.session_secret))
 vaultApp.route('/', createVaultRoutes(config.vault.path))
 app.route('/api/vault', vaultApp)
+
+// Sync space registry — which folder workspaces opted into sync. Same
+// session gate as the vault; stored in STATE_DIR, not in the vault.
+const syncApp = new Hono()
+syncApp.use('*', requireSession(config.auth.session_secret))
+syncApp.route('/', createSyncSpaceRoutes(join(STATE_DIR, 'sync-spaces.json')))
+app.route('/api/sync/spaces', syncApp)
 
 // Agent — REST provider catalog + WebSocket run/cancel/approval stream.
 // The agent routes module owns its own session-check middleware because

@@ -18,7 +18,9 @@ export type VaultEntry = {
   hash?: string // content SHA-256, files only
 }
 
-const SKIP_DIRS = new Set(['.git', '.svn', '.hg', 'node_modules'])
+// `.quill` is the desktop's per-folder sync metadata — never part of
+// vault content, so it stays out of the index/list surface entirely.
+const SKIP_DIRS = new Set(['.git', '.svn', '.hg', 'node_modules', '.quill'])
 
 async function sha256(path: string): Promise<string> {
   // Buffer the whole file. For vault contents (markdown + assets) sizes are

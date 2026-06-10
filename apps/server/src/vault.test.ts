@@ -165,6 +165,14 @@ describe('vault routes', () => {
     }
   })
 
+  test('GET /index skips .quill sync metadata', async () => {
+    await mkdir(join(root, '.quill'), { recursive: true })
+    await writeFile(join(root, '.quill', 'sync.json'), '{}', 'utf8')
+    const r = await req(app, 'GET', '/api/vault/index')
+    const data = (await r.json()) as Array<{ path: string }>
+    expect(data.some((e) => e.path.startsWith('.quill'))).toBe(false)
+  })
+
   // Cleanup — bun:test doesn't have afterEach hooks bundled per-test; do
   // it lazily by trusting tmpdir cleanup at process exit. Keeping `root`
   // referenced so the closure stays valid through the suite.
