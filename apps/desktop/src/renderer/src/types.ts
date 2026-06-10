@@ -21,6 +21,8 @@ export type {
   PlanStep,
   RouteDecision,
   Scope,
+  SessionIndex,
+  SessionMeta,
   SyncBinding,
   SyncEntry,
   SyncSnapshot,

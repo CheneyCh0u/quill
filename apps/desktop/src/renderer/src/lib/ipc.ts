@@ -108,9 +108,21 @@ export const ipc = {
       window.quill.agent.onEvent(cb)
   },
   context: {
-    load: (scope: Scope) => window.quill.context.load(scope),
-    save: (args: { scope: Scope; items: unknown[] }) => window.quill.context.save(args),
-    clear: (scope: Scope) => window.quill.context.clear(scope)
+    sessions: (scope: Scope) => window.quill.context.sessions(scope),
+    loadSession: (args: { scope: Scope; sessionId: string }) =>
+      window.quill.context.loadSession(args),
+    saveSession: (args: {
+      scope: Scope
+      sessionId: string
+      items: unknown[]
+      title: string
+      turnCount: number
+    }) => window.quill.context.saveSession(args),
+    createSession: (scope: Scope) => window.quill.context.createSession(scope),
+    setActiveSession: (args: { scope: Scope; sessionId: string }) =>
+      window.quill.context.setActiveSession(args),
+    deleteSession: (args: { scope: Scope; sessionId: string }) =>
+      window.quill.context.deleteSession(args)
   },
   providers: {
     list: () => window.quill.providers.list(),

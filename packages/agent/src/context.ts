@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
+import type { SessionIndex, SessionMeta } from '@quill/shared-types'
 import type { Scope } from './scope'
 
 /**
@@ -257,19 +258,7 @@ export function createContextStore(rootDir: string, opts: ContextStoreOptions = 
   }
 }
 
-export type SessionMeta = {
-  id: string
-  /** First user prompt, truncated by the caller. Empty = untouched. */
-  title: string
-  updatedAt: number
-  turnCount: number
-}
-
-export type SessionIndex = {
-  version: 1
-  activeId: string
-  sessions: SessionMeta[]
-}
+export type { SessionIndex, SessionMeta } from '@quill/shared-types'
 
 export type ContextStore = ReturnType<typeof createContextStore>
 

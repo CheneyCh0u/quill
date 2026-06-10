@@ -14,13 +14,16 @@ import {
   ListChecks,
   Route as RouteIcon,
   PlayCircle,
-  Download
+  Download,
+  Plus,
+  Trash2
 } from 'lucide-react'
 import { useApp } from '../state/app'
 import { ipc } from '../lib/ipc'
 import { render as renderMd } from '../lib/markdown'
 import { itemsToMessages, type ConvItem } from '../lib/itemsToMessages'
 import { sanitizeItems } from '../lib/sanitizeItems'
+import { deriveSessionTitle } from '../lib/sessionTitle'
 import { coerceUsage, sumUsage, formatTokens } from '../lib/usage'
 import { exportConversation } from '../lib/exportConversation'
 import { clampPanelWidth, PANEL_WIDTH_DEFAULT } from '../lib/panelWidth'
@@ -34,6 +37,7 @@ import {
 import { shouldCompress, splitForCompression } from '../lib/compressionTrigger'
 import { getProviderModel } from '../lib/providers'
 import { createWatchdog, type Watchdog } from '../lib/watchdog'
+import type { SessionIndex, SessionMeta } from '../types'
 
 // Renderer-side dead-man switch: if main goes silent for this long while a
 // run is still believed to be active, the UI recovers itself. main-side
@@ -208,6 +212,9 @@ export function AgentPanel({ onClose }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [input, setInput] = useState('')
   const [items, setItems] = useState<Item[]>([])
+  // Session index for the current scope. The store guarantees ≥1 entry;
+  // null only while the initial fetch is in flight.
+  const [sessionIndex, setSessionIndex] = useState<SessionIndex | null>(null)
   const [busy, setBusy] = useState(false)
   const [runId, setRunId] = useState<string | null>(null)
   // Compression is a side-band run that triggers automatically after a
@@ -278,21 +285,24 @@ export function AgentPanel({ onClose }: Props) {
   const effectivePlan: ModelChoice | null = planChoice ?? defaultChoice
   const effectiveBuild: ModelChoice | null = buildChoice ?? defaultChoice
 
-  // Load persisted conversation when the scope changes (or on first mount).
-  // Untitled scope is in-memory only — clear items so an old chat doesn't
-  // bleed into a fresh untitled file.
+  // Load the scope's session index + active session when the scope
+  // changes (or on first mount). Untitled scope gets an ephemeral session
+  // (store no-ops on writes) so the flow is uniform.
   useEffect(() => {
     let alive = true
     const load = async (): Promise<void> => {
       if (!scope) {
+        setSessionIndex(null)
         setItems([])
         return
       }
-      if (scope.kind === 'untitled') {
-        setItems([])
-        return
-      }
-      const persisted = await ipc.context.load(scope)
+      const index = await ipc.context.sessions(scope)
+      if (!alive) return
+      setSessionIndex(index)
+      const persisted = await ipc.context.loadSession({
+        scope,
+        sessionId: index.activeId
+      })
       if (!alive) return
       if (!persisted || !Array.isArray(persisted.items)) {
         setItems([])
@@ -505,18 +515,39 @@ export function AgentPanel({ onClose }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [items])
 
-  // Debounced persistence: 400ms after the last items[] mutation, flush to
-  // disk. Cheap because items[] only changes on agent events / user clicks
-  // (not on input typing), so we're not thrashing the FS. Untitled scope is
-  // memory-only.
+  // Debounced persistence: 400ms after the last items[] mutation, flush
+  // the ACTIVE SESSION to disk. Cheap because items[] only changes on
+  // agent events / user clicks (not on input typing). Untitled scope is
+  // memory-only (the store drops the write).
   useEffect(() => {
-    if (!scope || scope.kind === 'untitled') return
-    if (items.length === 0) return // empty items = either fresh start or post-clear; nothing to write
+    if (!scope || scope.kind === 'untitled' || !sessionIndex) return
+    if (items.length === 0) return // fresh session; nothing to write
+    const sessionId = sessionIndex.activeId
+    const title = deriveSessionTitle(items as Array<{ kind: string; text?: string }>)
+    const turnCount = items.filter((i) => i.kind === 'user').length
     const t = window.setTimeout(() => {
-      void ipc.context.save({ scope, items: items as unknown as unknown[] })
+      void ipc.context.saveSession({
+        scope,
+        sessionId,
+        items: items as unknown as unknown[],
+        title,
+        turnCount
+      })
+      // Mirror the meta into local state so the dropdown shows fresh
+      // titles without a refetch.
+      setSessionIndex((prev) =>
+        prev
+          ? {
+              ...prev,
+              sessions: prev.sessions.map((m) =>
+                m.id === sessionId ? { ...m, title, turnCount, updatedAt: Date.now() } : m
+              )
+            }
+          : prev
+      )
     }, 400)
     return () => window.clearTimeout(t)
-  }, [items, scope])
+  }, [items, scope, sessionIndex?.activeId])
 
   // Compression trigger: after every items[] update, if the most recent
   // finish event with usage crosses the threshold against the Build model's
@@ -796,13 +827,48 @@ export function AgentPanel({ onClose }: Props) {
     }
   }, [])
 
-  const handleClear = (): void => {
+  // ---- Session actions. All gated on !busy: switching the items array
+  // mid-run would route streaming events into the wrong conversation.
+  const loadSessionItems = useCallback(
+    async (sessionId: string): Promise<void> => {
+      if (!scope) return
+      const persisted = await ipc.context.loadSession({ scope, sessionId })
+      const cleaned =
+        persisted && Array.isArray(persisted.items)
+          ? (sanitizeItems(persisted.items as ConvItem[]) as unknown as Item[])
+          : []
+      setItems(cleaned)
+    },
+    [scope]
+  )
+
+  const handleSwitchSession = useCallback(
+    async (sessionId: string): Promise<void> => {
+      if (!scope || busy) return
+      await ipc.context.setActiveSession({ scope, sessionId })
+      setSessionIndex((prev) => (prev ? { ...prev, activeId: sessionId } : prev))
+      await loadSessionItems(sessionId)
+    },
+    [scope, busy, loadSessionItems]
+  )
+
+  const handleNewSession = useCallback(async (): Promise<void> => {
+    if (!scope || busy) return
+    const index = await ipc.context.createSession(scope)
+    setSessionIndex(index)
     setItems([])
-    // 「清空」语义是双清：UI 起空白，磁盘文件也删掉。重启 Quill 不会重现旧对话。
-    if (scope && scope.kind !== 'untitled') {
-      void ipc.context.clear(scope)
-    }
-  }
+  }, [scope, busy])
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: string): Promise<void> => {
+      if (!scope || busy) return
+      const wasActive = sessionIndex?.activeId === sessionId
+      const index = await ipc.context.deleteSession({ scope, sessionId })
+      setSessionIndex(index)
+      if (wasActive) await loadSessionItems(index.activeId)
+    },
+    [scope, busy, sessionIndex, loadSessionItems]
+  )
 
   const handleExport = useCallback(async (): Promise<void> => {
     if (items.length === 0) return
@@ -878,29 +944,31 @@ export function AgentPanel({ onClose }: Props) {
         title="拖动调整宽度"
       />
       <header className="h-11 px-4 flex items-center gap-2 border-b border-[var(--rule)] shrink-0 bg-[var(--paper)]">
-        <span className="font-display italic text-[14px] text-[var(--ink)]">
-          Agent
-        </span>
+        <SessionMenu
+          index={sessionIndex}
+          disabled={busy}
+          onSwitch={(id) => void handleSwitchSession(id)}
+          onCreate={() => void handleNewSession()}
+          onDelete={(id) => void handleDeleteSession(id)}
+        />
         <div className="flex-1" />
+        <button
+          onClick={() => void handleNewSession()}
+          disabled={busy}
+          className="no-drag p-1.5 rounded-md text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
+          title="新建会话"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
         {items.length > 0 && (
-          <>
-            <button
-              onClick={() => void handleExport()}
-              disabled={busy}
-              className="no-drag p-1.5 rounded-md text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
-              title="导出为 markdown"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleClear}
-              disabled={busy}
-              className="no-drag px-2 py-1 rounded-md text-[11px] text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
-              title="清空对话"
-            >
-              清空
-            </button>
-          </>
+          <button
+            onClick={() => void handleExport()}
+            disabled={busy}
+            className="no-drag p-1.5 rounded-md text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
+            title="导出为 markdown"
+          >
+            <Download className="w-4 h-4" />
+          </button>
         )}
         <button
           onClick={onClose}
@@ -1714,6 +1782,176 @@ function CompressedSummaryView({
       </button>
       {open && (
         <div className="px-3 py-2 prose-agent" dangerouslySetInnerHTML={{ __html: html }} />
+      )}
+    </div>
+  )
+}
+
+/** Session title for display — empty title means an untouched session. */
+function sessionLabel(meta: SessionMeta | undefined): string {
+  return meta?.title || '新会话'
+}
+
+function sessionTime(updatedAt: number): string {
+  if (!updatedAt) return ''
+  const d = new Date(updatedAt)
+  const today = new Date()
+  const sameDay = d.toDateString() === today.toDateString()
+  return sameDay
+    ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+}
+
+/**
+ * Header session switcher: current session title + chevron, dropdown
+ * with the scope's sessions (recent first, inline delete confirm). The
+ * 清空 button this replaces had destroy-only semantics; "new session"
+ * covers it and keeps the old conversation reachable.
+ */
+function SessionMenu({
+  index,
+  disabled,
+  onSwitch,
+  onCreate,
+  onDelete
+}: {
+  index: SessionIndex | null
+  disabled: boolean
+  onSwitch: (id: string) => void
+  onCreate: () => void
+  onDelete: (id: string) => void
+}): React.ReactElement {
+  const [open, setOpen] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) setConfirmingId(null)
+  }, [open])
+
+  const active = index?.sessions.find((m) => m.id === index.activeId)
+
+  return (
+    <div ref={wrapRef} className="relative min-w-0 max-w-[60%]">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="no-drag max-w-full flex items-center gap-1.5 px-1.5 py-1 -ml-1.5 rounded-md hover:bg-[var(--paper-soft)] transition group"
+        title="切换会话"
+      >
+        <span className="font-display italic text-[14px] text-[var(--ink)] truncate">
+          {sessionLabel(active)}
+        </span>
+        <ChevronDown
+          className={`w-3 h-3 text-[var(--ink-faint)] group-hover:text-[var(--ink)] shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && index && (
+        <div className="absolute left-0 top-full mt-1.5 w-72 rounded-lg border border-[var(--rule)] bg-[var(--paper)] shadow-[0_8px_28px_rgba(0,0,0,0.14),0_2px_6px_rgba(0,0,0,0.08)] text-[12px] z-50">
+          <p className="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] select-none">
+            sessions
+          </p>
+          <div className="px-1.5 pb-1 max-h-64 overflow-y-auto">
+            {index.sessions.map((m) => {
+              const isActive = m.id === index.activeId
+              if (confirmingId === m.id) {
+                return (
+                  <div
+                    key={m.id}
+                    className="px-2 py-1.5 rounded-md bg-[var(--accent-soft)]/40 flex items-center gap-2"
+                  >
+                    <span className="flex-1 font-serif-zh italic text-[11.5px] text-[var(--ink-soft)] truncate">
+                      删除「{sessionLabel(m)}」？
+                    </span>
+                    <button
+                      onClick={() => {
+                        setConfirmingId(null)
+                        onDelete(m.id)
+                      }}
+                      className="text-[11px] text-[var(--accent)] hover:underline shrink-0"
+                    >
+                      删除
+                    </button>
+                    <button
+                      onClick={() => setConfirmingId(null)}
+                      className="text-[11px] text-[var(--ink-faint)] hover:text-[var(--ink)] shrink-0"
+                    >
+                      取消
+                    </button>
+                  </div>
+                )
+              }
+              return (
+                <div
+                  key={m.id}
+                  className={`px-2 py-1.5 rounded-md flex items-center gap-2 group/row cursor-pointer transition ${
+                    isActive ? 'bg-[var(--paper-soft)]' : 'hover:bg-[var(--paper-soft)]'
+                  } ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+                  onClick={() => {
+                    if (!isActive) onSwitch(m.id)
+                    setOpen(false)
+                  }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className={`truncate ${isActive ? 'text-[var(--ink)]' : 'text-[var(--ink-soft)]'}`}
+                    >
+                      {sessionLabel(m)}
+                    </div>
+                    <div className="text-[10.5px] text-[var(--ink-faint)]">
+                      {sessionTime(m.updatedAt)}
+                      {m.turnCount > 0 ? ` · ${m.turnCount} 轮` : ' · 空'}
+                    </div>
+                  </div>
+                  {isActive ? (
+                    <Check className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setConfirmingId(m.id)
+                      }}
+                      className="p-1 rounded text-[var(--ink-ghost)] hover:text-[var(--accent)] opacity-0 group-hover/row:opacity-100 transition shrink-0"
+                      title="删除会话"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="border-t border-[var(--rule-soft)] px-1.5 py-1">
+            <button
+              onClick={() => {
+                setOpen(false)
+                onCreate()
+              }}
+              disabled={disabled}
+              className="w-full px-2 py-1.5 rounded-md flex items-center gap-2 text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] disabled:opacity-50 transition"
+            >
+              <Plus className="w-3 h-3 shrink-0" />
+              新建会话
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
