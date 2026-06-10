@@ -11,7 +11,7 @@ import {
 import { useApp } from './app'
 import { usePrefs } from './prefs'
 import { ipc } from '../lib/ipc'
-import type { SyncSnapshot, SyncSpace } from '../types'
+import type { SyncSnapshot, Workspace } from '../types'
 import { summarizeSync, type SyncSummary } from '../lib/syncSummary'
 
 export type SyncBusy = 'check' | 'push' | 'pull' | 'enable' | 'resolve' | null
@@ -31,10 +31,10 @@ type Ctx = {
   push: () => Promise<void>
   pull: () => Promise<void>
   enable: (name: string, remotePath: string) => Promise<void>
-  bindExisting: (space: SyncSpace) => Promise<void>
+  bindExisting: (space: Workspace) => Promise<void>
   resolve: (path: string, keep: 'local' | 'remote') => Promise<void>
   disable: () => Promise<void>
-  listSpaces: () => Promise<SyncSpace[]>
+  listSpaces: () => Promise<Workspace[]>
 }
 
 const SyncContext = createContext<Ctx | null>(null)
@@ -93,7 +93,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     [run]
   )
   const bindExisting = useCallback(
-    (space: SyncSpace) =>
+    (space: Workspace) =>
       run('enable', async (r) => {
         await ipc.sync.bind({ root: r, space })
         // Binding an existing space is the "pull it down" flow.

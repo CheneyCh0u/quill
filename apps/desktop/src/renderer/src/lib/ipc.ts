@@ -37,9 +37,12 @@ export function subscribeVault(cb: () => void): () => void {
   }
 }
 
-export function switchToRemote(mode: RemoteMode): void {
+export function switchToRemote(mode: RemoteMode, rootPath?: string): void {
   _vault = new RemoteVault({
     baseUrl: mode.url,
+    // Cloud workspace dir — all vault calls scope to it (paths in the
+    // tree stay workspace-relative).
+    rootPath,
     getAuthHeaders: async (): Promise<Record<string, string>> => {
       const token = await mode.getToken()
       return token ? { Authorization: `Bearer ${token}` } : {}
@@ -124,7 +127,7 @@ export const ipc = {
     status: (root: string) => window.quill.sync.status(root),
     enable: (args: { root: string; name: string; remotePath: string }) =>
       window.quill.sync.enable(args),
-    bind: (args: { root: string; space: import('@quill/shared-types').SyncSpace }) =>
+    bind: (args: { root: string; space: import('@quill/shared-types').Workspace }) =>
       window.quill.sync.bind(args),
     push: (root: string) => window.quill.sync.push(root),
     pull: (root: string) => window.quill.sync.pull(root),

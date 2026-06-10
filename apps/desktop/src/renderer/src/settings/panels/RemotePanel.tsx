@@ -3,7 +3,7 @@ import { CloudOff, Folder, Loader2, X } from 'lucide-react'
 import { ipc } from '../../lib/ipc'
 import { usePrefs, type AutoSyncInterval } from '../../state/prefs'
 import { PillGroup, Row, Toggle } from './controls'
-import type { SyncSpace } from '../../types'
+import type { Workspace } from '../../types'
 
 /**
  * Settings panel for the saved remote-vault connection.
@@ -224,7 +224,7 @@ const INTERVAL_OPTIONS: Array<{ value: AutoSyncInterval; label: string }> = [
  */
 function SyncSection({ serverConfigured }: { serverConfigured: boolean }) {
   const { prefs, setPref } = usePrefs()
-  const [spaces, setSpaces] = useState<SyncSpace[] | null>(null)
+  const [spaces, setSpaces] = useState<Workspace[] | null>(null)
   const [spacesError, setSpacesError] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
 
@@ -284,7 +284,7 @@ function SyncSection({ serverConfigured }: { serverConfigured: boolean }) {
         </p>
       </Row>
 
-      <Row label="同步空间" hint="记录在服务器，跨设备可见">
+      <Row label="云端工作区" hint="记录在服务器，跨设备可见">
         {!serverConfigured ? (
           <p className="font-serif-zh italic text-[12px] text-[var(--ink-faint)] pt-1.5">
             配置并连接服务器后可见。
@@ -295,7 +295,7 @@ function SyncSection({ serverConfigured }: { serverConfigured: boolean }) {
           </p>
         ) : spaces.length === 0 ? (
           <p className="font-serif-zh italic text-[12px] text-[var(--ink-faint)] pt-1.5">
-            还没有文件夹开启同步。在主窗口状态栏点击同步图标即可开启。
+            还没有云端工作区。在主窗口状态栏点击同步图标，或在 web 端新建。
           </p>
         ) : (
           <div className="space-y-1.5">

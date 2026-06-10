@@ -40,10 +40,10 @@ function fakeServer(): {
     const url = new URL(req.url)
     const path = decodeURIComponent(url.pathname)
 
-    if (path === '/api/sync/spaces' && req.method === 'GET') {
+    if (path === '/api/workspaces' && req.method === 'GET') {
       return Response.json(spaces)
     }
-    if (path === '/api/sync/spaces' && req.method === 'POST') {
+    if (path === '/api/workspaces' && req.method === 'POST') {
       const body = (await req.json()) as { name: string; remotePath: string }
       if (spaces.some((s) => s.remotePath === body.remotePath)) {
         return Response.json({ error: 'remotePath already registered' }, { status: 409 })
@@ -52,7 +52,7 @@ function fakeServer(): {
       spaces.push(space)
       return Response.json(space)
     }
-    const delSpace = path.match(/^\/api\/sync\/spaces\/(.+)$/)
+    const delSpace = path.match(/^\/api\/workspaces\/(.+)$/)
     if (delSpace && req.method === 'DELETE') {
       const i = spaces.findIndex((s) => s.id === delSpace[1])
       if (i === -1) return Response.json({ error: 'not found' }, { status: 404 })
@@ -283,13 +283,13 @@ describe('sync engine', () => {
   })
 
   test('a server without the sync-spaces API reads as "server too old"', async () => {
-    // Old deployments 404 on /api/sync/spaces (the SPA fallback even
+    // Old deployments 404 on /api/workspaces (the SPA fallback even
     // serves HTML on GET). Surface that as an actionable message, not
     // a bare "404: 404 Not Found".
     const root = await freshRoot()
     const oldServer: FetchLike = async (input, init) => {
       const req = input instanceof Request ? input : new Request(String(input), init)
-      if (new URL(req.url).pathname.startsWith('/api/sync/spaces')) {
+      if (new URL(req.url).pathname.startsWith('/api/workspaces')) {
         if (req.method === 'GET') {
           return new Response('<!doctype html>', {
             headers: { 'Content-Type': 'text/html; charset=UTF-8' }

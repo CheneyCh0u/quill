@@ -1,24 +1,38 @@
-import { PanelLeftClose, FolderOpen, X } from 'lucide-react'
+import { PanelLeftClose, FolderOpen, X, Cloud } from 'lucide-react'
 import { useApp } from '../state/app'
 import { FileTree } from './FileTree'
+import { CloudWorkspaceSwitcher } from './CloudWorkspaceSwitcher'
 
 export function Sidebar() {
   const { state, dirty, toggleSidebar, openFileAt, openFolder, closeWorkspace } = useApp()
   if (!state.workspace) return null
+  const inRemote = state.workspace.kind === 'remote'
 
   return (
     <aside className="w-64 shrink-0 border-r border-[var(--rule)] bg-[var(--paper-dim)] flex flex-col">
       <div className="px-3 py-3 flex items-start gap-1 border-b border-[var(--rule)] shrink-0">
         <div className="flex-1 min-w-0 mr-1">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-            workspace
-          </div>
-          <div
-            className="font-display text-[14px] text-[var(--ink)] truncate mt-0.5"
-            title={state.workspace.rootPath}
-          >
-            {state.workspace.rootName}
-          </div>
+          {inRemote ? (
+            <>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] flex items-center gap-1">
+                <Cloud className="w-2.5 h-2.5 shrink-0" />
+                <span className="truncate">remote · {state.workspace.rootName}</span>
+              </div>
+              <CloudWorkspaceSwitcher />
+            </>
+          ) : (
+            <>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
+                workspace
+              </div>
+              <div
+                className="font-display text-[14px] text-[var(--ink)] truncate mt-0.5"
+                title={state.workspace.rootPath}
+              >
+                {state.workspace.rootName}
+              </div>
+            </>
+          )}
         </div>
         <button
           onClick={openFolder}

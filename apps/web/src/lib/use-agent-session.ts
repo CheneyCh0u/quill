@@ -174,6 +174,8 @@ export type AgentSession = {
   send: (args: {
     text: string
     scope: AgentRunArgs['scope']
+    /** Cloud workspace to confine the run to; server resolves the dir. */
+    workspaceId?: string
     currentBuffer?: string
     currentSelection?: string
   }) => Promise<void>
@@ -299,7 +301,7 @@ export function useAgentSession(deps: {
   }, [])
 
   const send: AgentSession['send'] = useCallback(
-    async ({ text, scope, currentBuffer, currentSelection }) => {
+    async ({ text, scope, workspaceId, currentBuffer, currentSelection }) => {
       if (!selectedModel) return
       const runId = newId()
       const newTurn: AgentTurn = {
@@ -325,7 +327,8 @@ export function useAgentSession(deps: {
             currentBuffer,
             currentSelection
           },
-          (event) => handleEvent(runId, event)
+          (event) => handleEvent(runId, event),
+          workspaceId
         )
       } catch (err) {
         setTurns((prev) =>

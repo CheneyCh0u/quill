@@ -38,6 +38,67 @@ describe('RemoteVault onUnauthorized', () => {
   })
 })
 
+describe('RemoteVault rootPath (workspace scoping)', () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch
+  })
+
+  function capture(): { urls: string[]; bodies: string[] } {
+    const urls: string[] = []
+    const bodies: string[] = []
+    stubFetch((input, init) => {
+      urls.push(input)
+      if (typeof init?.body === 'string') bodies.push(init.body)
+      if (input.includes('/api/vault/list')) {
+        return new Response(
+          JSON.stringify([
+            { path: 'quill/notes', isDirectory: true },
+            { path: 'quill/h.md', isDirectory: false }
+          ]),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }
+      return new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    })
+    return { urls, bodies }
+  }
+
+  test('prefixes outgoing paths with the workspace dir', async () => {
+    const { urls, bodies } = capture()
+    const vault = new RemoteVault({ rootPath: 'quill' })
+    await vault.write('notes/a.md', 'x')
+    await vault.delete('notes/a.md')
+    await vault.mkdir('sub')
+    await vault.rename('a.md', 'b.md')
+    expect(urls[0]).toContain('/api/vault/file/quill/notes/a.md')
+    expect(urls[1]).toContain('/api/vault/file/quill/notes/a.md')
+    expect(bodies).toContainEqual(JSON.stringify({ path: 'quill/sub' }))
+    expect(bodies).toContainEqual(JSON.stringify({ from: 'quill/a.md', to: 'quill/b.md' }))
+  })
+
+  test('list queries the workspace dir and strips the prefix from results', async () => {
+    const { urls } = capture()
+    const vault = new RemoteVault({ rootPath: 'quill' })
+    const rootNodes = await vault.list('')
+    expect(urls[0]).toContain('dir=quill')
+    expect(rootNodes.map((n) => n.path)).toEqual(['notes', 'h.md'])
+
+    await vault.list('notes')
+    expect(urls[1]).toContain(`dir=${encodeURIComponent('quill/notes')}`)
+  })
+
+  test('no rootPath → behavior unchanged', async () => {
+    const { urls } = capture()
+    const vault = new RemoteVault()
+    const nodes = await vault.list('')
+    expect(urls[0]).not.toContain('dir=')
+    expect(nodes.map((n) => n.path)).toEqual(['quill/notes', 'quill/h.md'])
+  })
+})
+
 describe('RemoteVault credentials mode', () => {
   afterEach(() => {
     globalThis.fetch = realFetch

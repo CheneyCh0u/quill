@@ -5,7 +5,11 @@ import { cors } from 'hono/cors'
 import { loadConfig } from './config'
 import { createAuthRoutes } from './auth-routes'
 import { createVaultRoutes } from './vault'
-import { createSyncSpaceRoutes } from './sync-spaces'
+import {
+  createWorkspaceRoutes,
+  ensureWorkspaceState,
+  resolveWorkspaceRoot
+} from './workspaces'
 import { createAgentRoutes } from './agent'
 import { ProvidersStore } from './providers-store'
 import { requireSession } from './auth'
@@ -63,12 +67,20 @@ vaultApp.use('*', requireSession(config.auth.session_secret))
 vaultApp.route('/', createVaultRoutes(config.vault.path))
 app.route('/api/vault', vaultApp)
 
-// Sync space registry — which folder workspaces opted into sync. Same
-// session gate as the vault; stored in STATE_DIR, not in the vault.
-const syncApp = new Hono()
-syncApp.use('*', requireSession(config.auth.session_secret))
-syncApp.route('/', createSyncSpaceRoutes(join(STATE_DIR, 'sync-spaces.json')))
-app.route('/api/sync/spaces', syncApp)
+// Cloud workspaces — first-level dirs under the vault root; one registry
+// for the web/desktop switcher AND desktop folder-sync bindings. Startup
+// migrates the legacy sync-spaces registry (ids preserved), ensures the
+// default `quill` workspace and sweeps loose root files into it.
+const workspacesFile = join(STATE_DIR, 'workspaces.json')
+await ensureWorkspaceState({
+  storeFile: workspacesFile,
+  legacyFile: join(STATE_DIR, 'sync-spaces.json'),
+  vaultRoot: config.vault.path
+})
+const wsApp = new Hono()
+wsApp.use('*', requireSession(config.auth.session_secret))
+wsApp.route('/', createWorkspaceRoutes(workspacesFile, config.vault.path))
+app.route('/api/workspaces', wsApp)
 
 // Agent — REST provider catalog + WebSocket run/cancel/approval stream.
 // The agent routes module owns its own session-check middleware because
@@ -76,7 +88,9 @@ app.route('/api/sync/spaces', syncApp)
 const agentRoutes = createAgentRoutes({
   store: providersStore,
   sessionSecret: config.auth.session_secret,
-  vaultRoot: config.vault.path
+  vaultRoot: config.vault.path,
+  resolveWorkspaceRoot: (id) =>
+    resolveWorkspaceRoot(workspacesFile, config.vault.path, id)
 })
 app.route('/api/agent', agentRoutes.app)
 

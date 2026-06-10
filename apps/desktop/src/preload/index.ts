@@ -10,7 +10,7 @@ import type {
   PlanApprovalResponse,
   Scope,
   SyncSnapshot,
-  SyncSpace
+  Workspace
 } from '@quill/shared-types'
 
 // Re-export the shared types so existing consumers (`import type { ... }
@@ -138,7 +138,7 @@ const api = {
     status: (root: string): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:status', root),
     enable: (args: { root: string; name: string; remotePath: string }): Promise<SyncSnapshot> =>
       ipcRenderer.invoke('sync:enable', args),
-    bind: (args: { root: string; space: SyncSpace }): Promise<SyncSnapshot> =>
+    bind: (args: { root: string; space: Workspace }): Promise<SyncSnapshot> =>
       ipcRenderer.invoke('sync:bind', args),
     push: (root: string): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:push', root),
     pull: (root: string): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:pull', root),
@@ -149,7 +149,7 @@ const api = {
     }): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:resolve', args),
     disable: (args: { root: string; removeSpace: boolean }): Promise<void> =>
       ipcRenderer.invoke('sync:disable', args),
-    spaces: (): Promise<SyncSpace[]> => ipcRenderer.invoke('sync:spaces'),
+    spaces: (): Promise<Workspace[]> => ipcRenderer.invoke('sync:spaces'),
     removeSpace: (id: string): Promise<void> => ipcRenderer.invoke('sync:removeSpace', id)
   },
   remote: {
