@@ -6,7 +6,9 @@ import type {
   AgentRunArgs,
   HistoryMessage
 } from '@quill/shared-types'
+import type { SessionIndex } from '@quill/shared-types'
 import { AgentClient, type AgentConnectionStatus } from './agent-client'
+import { createAgentSessionStore, titleFromPrompt } from './agent-sessions'
 import { providersApi, type CatalogEntry } from './providers-api'
 import { coerceUsage, type Usage } from './usage'
 import { shouldCompress } from './compression'
@@ -33,11 +35,10 @@ type PersistedTurn = Omit<AgentTurn, 'pendingApprovals' | 'status'> & {
 
 export type SelectedModel = { providerId: string; modelId: string }
 
-const LS_TURNS = 'quill-agent-turns-v2'
 const LS_MODEL = 'quill-agent-model-v1'
 
-function persist(turns: AgentTurn[]): void {
-  const settled = turns
+function settle(turns: AgentTurn[]): PersistedTurn[] {
+  return turns
     .filter((t) => t.status !== 'running')
     .map<PersistedTurn>((t) => ({
       runId: t.runId,
@@ -47,37 +48,20 @@ function persist(turns: AgentTurn[]): void {
       status: t.status as 'done' | { error: string },
       usage: t.usage
     }))
-  if (settled.length === 0) {
-    localStorage.removeItem(LS_TURNS)
-    return
-  }
-  try {
-    localStorage.setItem(LS_TURNS, JSON.stringify(settled))
-  } catch {
-    /* localStorage full / disabled — drop silently */
-  }
 }
 
-function restore(): AgentTurn[] {
-  try {
-    const raw = localStorage.getItem(LS_TURNS)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((p): p is PersistedTurn => !!p && typeof p.runId === 'string')
-      .map((p) => ({
-        runId: p.runId,
-        prompt: p.prompt,
-        text: p.text,
-        toolCalls: Array.isArray(p.toolCalls) ? p.toolCalls : [],
-        pendingApprovals: new Map(),
-        status: p.status,
-        usage: p.usage
-      }))
-  } catch {
-    return []
-  }
+function reviveTurns(raw: unknown[]): AgentTurn[] {
+  return raw
+    .filter((p): p is PersistedTurn => !!p && typeof (p as PersistedTurn).runId === 'string')
+    .map((p) => ({
+      runId: p.runId,
+      prompt: p.prompt,
+      text: p.text,
+      toolCalls: Array.isArray(p.toolCalls) ? p.toolCalls : [],
+      pendingApprovals: new Map(),
+      status: p.status,
+      usage: p.usage
+    }))
 }
 
 function restoreSelectedModel(): SelectedModel | null {
@@ -181,11 +165,18 @@ export type AgentSession = {
   }) => Promise<void>
   cancel: () => Promise<void>
   respond: (toolCallId: string, approved: boolean) => Promise<void>
-  reset: () => void
+  /** Sessions for the current workspace (never empty once loaded). */
+  sessions: SessionIndex | null
+  switchSession: (id: string) => void
+  newSession: () => void
+  deleteSession: (id: string) => void
 }
 
 export function useAgentSession(deps: {
   onActivityComplete?: () => void
+  /** Cloud workspace the sessions belong to. Changing it loads that
+   *  workspace's active session. */
+  workspaceId?: string
 }): AgentSession {
   // Status state stored in a ref-backed state so the AgentClient callback
   // can update it without re-creating the client (which would tear down
@@ -202,7 +193,22 @@ export function useAgentSession(deps: {
   const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null)
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
-  const [turns, setTurns] = useState<AgentTurn[]>(() => restore())
+  const workspaceKey = deps.workspaceId ?? 'default'
+  const store = useMemo(
+    () => createAgentSessionStore(localStorage, workspaceKey),
+    [workspaceKey]
+  )
+  const [sessions, setSessions] = useState<SessionIndex | null>(null)
+  const [turns, setTurns] = useState<AgentTurn[]>([])
+  // Workspace changed (or first mount): load its active session.
+  useEffect(() => {
+    const idx = store.index()
+    setSessions(idx)
+    setTurns(reviveTurns(store.loadTurns(idx.activeId)))
+    setCompressionStatus('idle')
+    compressedFor.current.clear()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store])
   const [selectedModel, setSelectedModelState] = useState<SelectedModel | null>(() =>
     restoreSelectedModel()
   )
@@ -218,8 +224,18 @@ export function useAgentSession(deps: {
     onCompleteRef.current = deps.onActivityComplete
   }, [deps.onActivityComplete])
 
+  // Persist settled turns into the ACTIVE session; meta (title from the
+  // first prompt, turn count) keeps the dropdown fresh.
   useEffect(() => {
-    persist(turns)
+    if (!sessions) return
+    const settled = settle(turns)
+    if (settled.length === 0 && turns.length === 0) return // fresh session
+    store.saveTurns(sessions.activeId, settled, {
+      title: titleFromPrompt(settled[0]?.prompt ?? turns[0]?.prompt ?? ''),
+      turnCount: settled.length
+    })
+    setSessions((prev) => (prev ? store.index() : prev))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turns])
 
   // Load configured providers + catalog in parallel.
@@ -369,11 +385,41 @@ export function useAgentSession(deps: {
     [client, runningTurn]
   )
 
-  const reset = useCallback(() => {
+  // Session actions — gated while a run streams so events can't land in
+  // the wrong conversation.
+  const running = turns.some((t) => t.status === 'running')
+  const switchSession = useCallback(
+    (id: string) => {
+      if (running) return
+      const idx = store.setActive(id)
+      setSessions(idx)
+      setTurns(reviveTurns(store.loadTurns(id)))
+      setCompressionStatus('idle')
+      compressedFor.current.clear()
+    },
+    [running, store]
+  )
+  const newSession = useCallback(() => {
+    if (running) return
+    setSessions(store.create())
     setTurns([])
     setCompressionStatus('idle')
     compressedFor.current.clear()
-  }, [])
+  }, [running, store])
+  const deleteSession = useCallback(
+    (id: string) => {
+      if (running) return
+      const wasActive = sessions?.activeId === id
+      const idx = store.remove(id)
+      setSessions(idx)
+      if (wasActive) {
+        setTurns(reviveTurns(store.loadTurns(idx.activeId)))
+        setCompressionStatus('idle')
+        compressedFor.current.clear()
+      }
+    },
+    [running, store, sessions]
+  )
 
   // Derive context window + last usage from catalog + turns. Must be
   // declared before the compression closures that read them.
@@ -491,6 +537,9 @@ export function useAgentSession(deps: {
     send,
     cancel,
     respond,
-    reset
+    sessions,
+    switchSession,
+    newSession,
+    deleteSession
   }
 }
