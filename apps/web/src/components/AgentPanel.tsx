@@ -10,6 +10,10 @@ type Props = {
    *  blow away the conversation. */
   session: AgentSession
   scope: Scope
+  /** Cloud workspace the run is confined to (server pins scope.root). */
+  workspaceId?: string
+  /** Display label for the permission hint, e.g. "quill". */
+  workspaceLabel?: string
   currentBuffer?: string
   currentSelection?: string
   onClose: () => void
@@ -18,6 +22,8 @@ type Props = {
 export function AgentPanel({
   session,
   scope,
+  workspaceId,
+  workspaceLabel,
   currentBuffer,
   currentSelection,
   onClose
@@ -57,7 +63,7 @@ export function AgentPanel({
     const text = prompt.trim()
     if (!text) return
     setPrompt('')
-    await send({ text, scope, currentBuffer, currentSelection })
+    await send({ text, scope, workspaceId, currentBuffer, currentSelection })
   }
 
   if (loadErr) {
@@ -123,6 +129,11 @@ export function AgentPanel({
         <div ref={bottomRef} />
       </div>
       <footer className="border-t border-[var(--rule-soft)] p-3 flex flex-col gap-2">
+        {workspaceLabel && (
+          <p className="text-[11px] text-[var(--ink-faint)] select-none">
+            agent 可访问：<span className="font-mono">/{workspaceLabel}</span>
+          </p>
+        )}
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}

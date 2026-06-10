@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getFileType, type FileNode, type Scope } from '@quill/shared-types'
+import { getFileType, type FileNode, type Scope, type Workspace } from '@quill/shared-types'
 import { AgentPanel } from '../components/AgentPanel'
 import { DownloadMenu } from '../components/DownloadMenu'
 import { Editor } from '../components/Editor'
@@ -8,20 +8,53 @@ import { FileTree, type FileTreeHandle } from '../components/FileTree'
 import { ModeSwitcher, type ViewMode } from '../components/ModeSwitcher'
 import { Outline, OutlineSheetButton } from '../components/Outline'
 import { Preview } from '../components/Preview'
+import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher'
 import { RemoteVault, UnauthorizedError } from '@quill/vault-adapter'
 import { logout } from '../lib/auth'
 import { notifyUnauthorized } from '../lib/auth-events'
 import { useDialogs } from '../lib/dialogs'
 import { useAgentSession } from '../lib/use-agent-session'
+import {
+  createWorkspace,
+  fetchWorkspaces,
+  pickActiveWorkspace,
+  readStoredWorkspaceId,
+  storeWorkspaceId
+} from '../lib/workspaces'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | { error: string }
 
 export function Vault(): JSX.Element {
   const navigate = useNavigate()
   const dialogs = useDialogs()
+  // Cloud workspace the whole page is scoped to. null until the registry
+  // loads — the file tree waits for it (a tree against the vault root
+  // would flash content from other workspaces).
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetchWorkspaces()
+      .then((list) => {
+        if (cancelled) return
+        setWorkspaces(list)
+        setWorkspace(pickActiveWorkspace(list, readStoredWorkspaceId()))
+      })
+      .catch(() => {
+        /* 401 already routed to login via notifyUnauthorized */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const vault = useMemo(
-    () => new RemoteVault({ onUnauthorized: notifyUnauthorized }),
-    []
+    () =>
+      new RemoteVault({
+        onUnauthorized: notifyUnauthorized,
+        rootPath: workspace?.remotePath ?? ''
+      }),
+    [workspace]
   )
   const [selected, setSelected] = useState<FileNode | null>(null)
   // `source` is the last-known disk content (what the server saw last);
@@ -74,6 +107,53 @@ export function Vault(): JSX.Element {
   })
 
   const dirty = buffer !== source
+
+  // Workspace switch tears the whole page context down: file selection,
+  // buffers, and the agent conversation (its permission scope changed).
+  const switchWorkspace = useCallback(
+    async (ws: Workspace): Promise<boolean> => {
+      if (dirty) {
+        const ok = await dialogs.confirm({
+          title: '放弃未保存的修改',
+          message: '当前文件有未保存的修改，确认放弃并切换工作区？',
+          confirmText: '放弃',
+          danger: true
+        })
+        if (!ok) return false
+      }
+      setWorkspace(ws)
+      storeWorkspaceId(ws.id)
+      setSelected(null)
+      setSource('')
+      setBuffer('')
+      setLoadErr(null)
+      agent.reset()
+      return true
+    },
+    [dirty, dialogs, agent]
+  )
+
+  const handleCreateWorkspace = useCallback(async (): Promise<void> => {
+    const name = await dialogs.prompt({
+      title: '新建工作区',
+      label: '名称（即 vault 根下的目录名）',
+      placeholder: 'research',
+      confirmText: '创建并切换',
+      validate: (v) =>
+        /^[^/\\]+$/.test(v.trim()) && v.trim() !== '' ? null : '名称不能为空或包含斜杠'
+    })
+    if (!name?.trim()) return
+    try {
+      const ws = await createWorkspace(name.trim())
+      setWorkspaces((prev) => [...prev, ws])
+      await switchWorkspace(ws)
+    } catch (err) {
+      await dialogs.alert({
+        title: '创建失败',
+        message: err instanceof Error ? err.message : String(err)
+      })
+    }
+  }, [dialogs, switchWorkspace])
 
   // Load source whenever the selected file changes.
   useEffect(() => {
@@ -206,9 +286,16 @@ export function Vault(): JSX.Element {
           >
             ✕
           </button>
-          <span className="font-display text-lg text-[var(--ink)] flex-1">
-            Quill
-          </span>
+          {workspace ? (
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              active={workspace}
+              onSwitch={switchWorkspace}
+              onCreate={() => void handleCreateWorkspace()}
+            />
+          ) : (
+            <span className="font-display text-lg text-[var(--ink)] flex-1">Quill</span>
+          )}
           <button
             type="button"
             onClick={onLogout}
@@ -218,7 +305,11 @@ export function Vault(): JSX.Element {
           </button>
         </div>
         <div className="flex-1 overflow-hidden">
+          {workspace === null ? (
+            <p className="px-4 py-3 text-sm text-[var(--ink-faint)]">加载工作区…</p>
+          ) : (
           <FileTree
+            key={workspace.id}
             ref={fileTreeRef}
             vault={vault}
             selectedPath={selected?.path ?? null}
@@ -247,6 +338,7 @@ export function Vault(): JSX.Element {
               }
             }}
           />
+          )}
         </div>
       </aside>
 
@@ -357,6 +449,8 @@ export function Vault(): JSX.Element {
           <AgentPanel
             session={agent}
             scope={agentScope}
+            workspaceId={workspace?.id}
+            workspaceLabel={workspace?.remotePath}
             currentBuffer={selected ? buffer : undefined}
             onClose={() => setAiOpen(false)}
           />

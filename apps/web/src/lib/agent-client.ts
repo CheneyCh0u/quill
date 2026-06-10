@@ -152,7 +152,8 @@ export class AgentClient {
   async run(
     runId: string,
     args: AgentRunArgs,
-    onEvent: AgentEventHandler
+    onEvent: AgentEventHandler,
+    workspaceId?: string
   ): Promise<void> {
     this.handlers.set(runId, (event) => {
       onEvent(event)
@@ -162,7 +163,7 @@ export class AgentClient {
         this.handlers.delete(runId)
       }
     })
-    await this.send({ type: 'run', runId, args })
+    await this.send({ type: 'run', runId, args, workspaceId })
   }
 
   /**
