@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>云同步 · 设计稿 — Quill</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,30..100,0..1;1,9..144,300..900,30..100,0..1&family=Geist:wght@300..700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:        oklch(0.974 0.012 86);
+    --paper-dim:    oklch(0.952 0.014 84);
+    --paper-soft:   oklch(0.928 0.016 80);
+    --paper-edge:   oklch(0.892 0.018 76);
+    --ink:          oklch(0.225 0.018 50);
+    --ink-soft:     oklch(0.42  0.014 50);
+    --ink-faint:    oklch(0.62  0.010 50);
+    --ink-ghost:    oklch(0.78  0.008 50);
+    --rule:         oklch(0.88  0.014 75);
+    --rule-soft:    oklch(0.92  0.012 78);
+    --accent:       oklch(0.55  0.16 28);
+    --accent-soft:  oklch(0.93  0.04 35);
+    --ok:           oklch(0.55 0.10 150);
+  }
+  .dark-theme{
+    --paper:        oklch(0.178 0.012 248);
+    --paper-dim:    oklch(0.206 0.012 248);
+    --paper-soft:   oklch(0.238 0.014 250);
+    --paper-edge:   oklch(0.282 0.015 250);
+    --ink:          oklch(0.924 0.008 80);
+    --ink-soft:     oklch(0.74  0.008 80);
+    --ink-faint:    oklch(0.54  0.008 80);
+    --ink-ghost:    oklch(0.40  0.008 80);
+    --rule:         oklch(0.30  0.012 248);
+    --rule-soft:    oklch(0.26  0.012 248);
+    --accent:       oklch(0.78  0.14 40);
+    --accent-soft:  oklch(0.30  0.08 35);
+    --ok:           oklch(0.72 0.10 150);
+  }
+  body{ background:var(--paper); color:var(--ink); font-family:"Geist","Noto Serif SC",system-ui,sans-serif; }
+  .font-display{ font-family:"Fraunces","Noto Serif SC",Georgia,serif; }
+  .font-serif-zh{ font-family:"Noto Serif SC","Fraunces",Georgia,serif; }
+  .mono{ font-family:"JetBrains Mono",Menlo,monospace; }
+  .spin{ animation:spin 1.2s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  .pop-shadow{ box-shadow:0 8px 28px oklch(0 0 0 / 0.14), 0 2px 6px oklch(0 0 0 / 0.08); }
+  svg{ flex-shrink:0; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ============ SVG sprite：同步图标系（lucide 风格，24×24，stroke 2） ============ -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- 云轮廓（lucide cloud），同步图标的统一底座 -->
+    <g id="cloud-base"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+  </defs>
+  <!-- 未开启：虚线云，中央 + 号 -->
+  <symbol id="i-sync-off" viewBox="0 0 24 24">
+    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2.6 2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12 11v4M10 13h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </symbol>
+  <!-- 已同步：云 + 勾 -->
+  <symbol id="i-sync-ok" viewBox="0 0 24 24">
+    <use href="#cloud-base"/>
+    <path d="m9.5 13 2 2 3.5-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <!-- 有差异：云 + 实心点 -->
+  <symbol id="i-sync-dirty" viewBox="0 0 24 24">
+    <use href="#cloud-base"/>
+    <circle cx="12.5" cy="13" r="2.2" fill="currentColor" stroke="none"/>
+  </symbol>
+  <!-- 冲突 / 错误：云 + 叹号 -->
+  <symbol id="i-sync-conflict" viewBox="0 0 24 24">
+    <use href="#cloud-base"/>
+    <path d="M12.5 9.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="12.5" cy="16" r="1.1" fill="currentColor" stroke="none"/>
+  </symbol>
+  <!-- 同步中：refresh-cw -->
+  <symbol id="i-syncing" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>
+    </g>
+  </symbol>
+  <!-- 离线：lucide cloud-off -->
+  <symbol id="i-offline" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m2 2 20 20"/><path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/>
+      <path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"/>
+    </g>
+  </symbol>
+  <!-- 现有：cloud（远程模式） / cloud-off / sparkles / sun -->
+  <symbol id="i-cloud" viewBox="0 0 24 24"><use href="#cloud-base"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></g></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></g></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></g></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></g></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></g></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></g></symbol>
+</svg>
+
+<!-- ============ 页头 ============ -->
+<header class="max-w-[1080px] mx-auto px-8 pt-12 pb-8 flex items-end justify-between">
+  <div>
+    <p class="font-display italic text-[13px] text-[var(--ink-faint)] mb-1">Quill · 设计稿 · 2026-06</p>
+    <h1 class="font-display text-[40px] leading-tight" style="font-weight:500">文件夹工作区 · 云同步</h1>
+    <p class="font-serif-zh italic text-[14px] text-[var(--ink-soft)] mt-2 max-w-[640px]">
+      本地文件夹 ↔ 自部署服务器的手动推拉同步。按工作区显式开启，状态栏常驻安静指示，
+      差异才提醒，永不静默覆盖。
+    </p>
+  </div>
+  <button onclick="document.documentElement.classList.toggle('dark-theme')"
+    class="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[var(--rule)] text-[12px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)] transition">
+    <svg width="13" height="13"><use href="#i-sun"/></svg> 浅 / 深
+  </button>
+</header>
+
+<main class="max-w-[1080px] mx-auto px-8 pb-24 space-y-16">
+
+<!-- ============ §1 状态栏：图标状态一览 ============ -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">1 · 状态栏指示器</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    同步指示器加在现有云图标（远程模式开关）<b>左侧</b>，中间以细分隔线隔开，避免两个云语义混淆。
+    仅本地文件夹工作区出现；单文件 / 远程模式 / 空状态下不渲染。一致时是淡墨色，几乎隐形；
+    有差异时变 accent 并带 <span class="mono">↑n ↓n</span> 计数。
+  </p>
+
+  <div class="space-y-3">
+    <!-- 每行一个状态栏复刻 -->
+    <!-- 未开启 -->
+    <div class="flex items-center gap-4">
+      <div class="w-28 text-right text-[12px] text-[var(--ink-soft)] shrink-0">未开启</div>
+      <div class="flex-1 h-7 px-4 flex items-center gap-3 text-[11px] text-[var(--ink-faint)] border border-[var(--rule)] rounded bg-[var(--paper-dim)]">
+        <span><span class="text-[var(--ink-soft)]">1,284</span> 字</span><span class="text-[var(--ink-ghost)]">·</span><span class="font-serif-zh italic">已保存</span>
+        <div class="flex-1"></div>
+        <button class="p-1 rounded flex items-center text-[var(--ink-ghost)] hover:text-[var(--ink)]" title="为此文件夹开启云同步"><svg width="14" height="14"><use href="#i-sync-off"/></svg></button>
+        <div class="w-px h-3.5 bg-[var(--rule)]"></div>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-offline"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sparkles"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+      </div>
+    </div>
+    <!-- 已同步 -->
+    <div class="flex items-center gap-4">
+      <div class="w-28 text-right text-[12px] text-[var(--ink-soft)] shrink-0">两端一致</div>
+      <div class="flex-1 h-7 px-4 flex items-center gap-3 text-[11px] text-[var(--ink-faint)] border border-[var(--rule)] rounded bg-[var(--paper-dim)]">
+        <span><span class="text-[var(--ink-soft)]">1,284</span> 字</span><span class="text-[var(--ink-ghost)]">·</span><span class="font-serif-zh italic">已保存</span>
+        <div class="flex-1"></div>
+        <button class="p-1 rounded flex items-center text-[var(--ink-faint)]" title="已同步 · 上次 14:32"><svg width="14" height="14"><use href="#i-sync-ok"/></svg></button>
+        <div class="w-px h-3.5 bg-[var(--rule)]"></div>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-offline"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sparkles"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+      </div>
+    </div>
+    <!-- 有差异 -->
+    <div class="flex items-center gap-4">
+      <div class="w-28 text-right text-[12px] text-[var(--ink-soft)] shrink-0">有待同步差异</div>
+      <div class="flex-1 h-7 px-4 flex items-center gap-3 text-[11px] text-[var(--ink-faint)] border border-[var(--rule)] rounded bg-[var(--paper-dim)]">
+        <span><span class="text-[var(--ink-soft)]">1,284</span> 字</span><span class="text-[var(--ink-ghost)]">·</span><span class="font-serif-zh italic">已保存</span>
+        <div class="flex-1"></div>
+        <button class="px-1 py-1 rounded flex items-center gap-1 text-[var(--accent)] bg-[var(--accent-soft)]/60" title="3 待推送 · 1 待拉取">
+          <svg width="14" height="14"><use href="#i-sync-dirty"/></svg>
+          <span class="mono text-[10px] leading-none">↑3 ↓1</span>
+        </button>
+        <div class="w-px h-3.5 bg-[var(--rule)]"></div>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-offline"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sparkles"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+      </div>
+    </div>
+    <!-- 同步中 -->
+    <div class="flex items-center gap-4">
+      <div class="w-28 text-right text-[12px] text-[var(--ink-soft)] shrink-0">同步中</div>
+      <div class="flex-1 h-7 px-4 flex items-center gap-3 text-[11px] text-[var(--ink-faint)] border border-[var(--rule)] rounded bg-[var(--paper-dim)]">
+        <span><span class="text-[var(--ink-soft)]">1,284</span> 字</span><span class="text-[var(--ink-ghost)]">·</span><span class="font-serif-zh italic">已保存</span>
+        <div class="flex-1"></div>
+        <button class="p-1 rounded flex items-center text-[var(--ink-soft)]" title="正在推送 2/3…"><svg width="13" height="13" class="spin"><use href="#i-syncing"/></svg></button>
+        <div class="w-px h-3.5 bg-[var(--rule)]"></div>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-offline"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sparkles"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+      </div>
+    </div>
+    <!-- 冲突 -->
+    <div class="flex items-center gap-4">
+      <div class="w-28 text-right text-[12px] text-[var(--ink-soft)] shrink-0">冲突</div>
+      <div class="flex-1 h-7 px-4 flex items-center gap-3 text-[11px] text-[var(--ink-faint)] border border-[var(--rule)] rounded bg-[var(--paper-dim)]">
+        <span><span class="text-[var(--ink-soft)]">1,284</span> 字</span><span class="text-[var(--ink-ghost)]">·</span><span class="font-serif-zh italic">已保存</span>
+        <div class="flex-1"></div>
+        <button class="px-1 py-1 rounded flex items-center gap-1 text-[var(--accent)] bg-[var(--accent-soft)]" title="2 个文件两端都有改动">
+          <svg width="14" height="14"><use href="#i-sync-conflict"/></svg>
+          <span class="mono text-[10px] leading-none">2</span>
+        </button>
+        <div class="w-px h-3.5 bg-[var(--rule)]"></div>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-offline"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sparkles"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+      </div>
+    </div>
+    <!-- 离线 -->
+    <div class="flex items-center gap-4">
+      <div class="w-28 text-right text-[12px] text-[var(--ink-soft)] shrink-0">服务器不可达</div>
+      <div class="flex-1 h-7 px-4 flex items-center gap-3 text-[11px] text-[var(--ink-faint)] border border-[var(--rule)] rounded bg-[var(--paper-dim)]">
+        <span><span class="text-[var(--ink-soft)]">1,284</span> 字</span><span class="text-[var(--ink-ghost)]">·</span><span class="font-serif-zh italic">已保存</span>
+        <div class="flex-1"></div>
+        <button class="p-1 rounded flex items-center text-[var(--ink-ghost)]" title="无法连接服务器 · 点击重试"><svg width="14" height="14"><use href="#i-offline"/></svg></button>
+        <div class="w-px h-3.5 bg-[var(--rule)]"></div>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-offline"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sparkles"/></svg></span>
+        <span class="p-1 text-[var(--ink-faint)]"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+      </div>
+    </div>
+  </div>
+
+  <p class="font-serif-zh italic text-[12px] text-[var(--ink-faint)] mt-4">
+    注：分隔线右侧三个图标是现状已有的「远程模式 / Agent / 主题」按钮，原样保留，不受本功能影响。
+  </p>
+</section>
+
+<!-- ============ §2 主场景：popover（有差异态） ============ -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">2 · 同步面板（点击指示器上浮）</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    点击状态栏指示器，从右下角向上浮出 320px 宽的面板。差异按方向分组列出，
+    推送 / 拉取各自只处理自己方向的条目，互不越界。
+  </p>
+
+  <!-- 主窗口缩略 + popover -->
+  <div class="relative border border-[var(--rule)] rounded-lg overflow-hidden bg-[var(--paper)]" style="height:520px">
+    <!-- 标题栏 -->
+    <div class="h-7 bg-[var(--paper-dim)] border-b border-[var(--rule)] flex items-center px-3 gap-1.5">
+      <span class="w-2.5 h-2.5 rounded-full bg-[var(--ink-ghost)] opacity-50"></span>
+      <span class="w-2.5 h-2.5 rounded-full bg-[var(--ink-ghost)] opacity-50"></span>
+      <span class="w-2.5 h-2.5 rounded-full bg-[var(--ink-ghost)] opacity-50"></span>
+    </div>
+    <div class="flex" style="height:calc(100% - 28px - 28px)">
+      <!-- 侧栏 -->
+      <aside class="w-56 shrink-0 border-r border-[var(--rule)] bg-[var(--paper-dim)] flex flex-col">
+        <div class="px-3 py-3 border-b border-[var(--rule)]">
+          <div class="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">workspace</div>
+          <div class="font-display text-[14px] mt-0.5">my-notes</div>
+        </div>
+        <div class="py-2 text-[12.5px] text-[var(--ink-soft)] space-y-px">
+          <div class="px-3 py-1 flex items-center gap-1.5"><svg width="12" height="12" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>docs<span class="flex-1"></span></div>
+          <div class="px-3 py-1 pl-7 flex items-center gap-1.5 text-[var(--ink)] bg-[var(--paper-soft)]">plan.md<span class="flex-1"></span><svg width="11" height="11" class="text-[var(--accent)]" title="本地已修改"><use href="#i-dot"/></svg></div>
+          <div class="px-3 py-1 flex items-center gap-1.5"><svg width="12" height="12" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>drafts</div>
+          <div class="px-3 py-1 pl-7 flex items-center gap-1.5">idea.md<span class="flex-1"></span><svg width="11" height="11" class="text-[var(--accent)]" title="仅本地，未推送"><use href="#i-plus"/></svg></div>
+          <div class="px-3 py-1 flex items-center gap-1.5"><svg width="12" height="12" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>journal</div>
+          <div class="px-3 py-1 pl-7 flex items-center gap-1.5">2026-06.md<span class="flex-1"></span><svg width="11" height="11" class="text-[var(--ink-faint)]" title="云端有更新"><use href="#i-down"/></svg></div>
+          <div class="px-3 py-1 flex items-center gap-1.5">README.md</div>
+        </div>
+        <div class="mt-auto px-3 py-2 border-t border-[var(--rule-soft)] text-[10.5px] text-[var(--ink-faint)] font-serif-zh italic">
+          文件树行尾复用同一套状态图标（可选实现，第二期）
+        </div>
+      </aside>
+      <!-- 编辑区示意 -->
+      <div class="flex-1 px-10 py-8 text-[var(--ink-ghost)] overflow-hidden">
+        <div class="font-display text-[22px] text-[var(--ink-soft)] mb-4"># 项目计划</div>
+        <div class="space-y-2.5">
+          <div class="h-3 rounded bg-[var(--paper-soft)] w-11/12"></div>
+          <div class="h-3 rounded bg-[var(--paper-soft)] w-9/12"></div>
+          <div class="h-3 rounded bg-[var(--paper-soft)] w-10/12"></div>
+          <div class="h-3 rounded bg-[var(--paper-soft)] w-7/12"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- popover -->
+    <div class="absolute bottom-10 right-3 w-80 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px]">
+      <!-- 头 -->
+      <div class="px-4 pt-3.5 pb-3 border-b border-[var(--rule-soft)]">
+        <div class="flex items-center gap-2">
+          <svg width="14" height="14" class="text-[var(--accent)]"><use href="#i-sync-dirty"/></svg>
+          <span class="font-medium text-[13px] text-[var(--ink)]">云同步</span>
+          <span class="font-display italic text-[12px] text-[var(--ink-faint)]">my-notes</span>
+          <div class="flex-1"></div>
+          <button class="p-1 rounded text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]" title="同步设置"><svg width="12" height="12"><use href="#i-gear"/></svg></button>
+        </div>
+        <div class="mt-1 text-[11px] text-[var(--ink-faint)]">
+          上次同步 今天 14:32 <span class="text-[var(--ink-ghost)]">·</span> 自动同步 每 5 分钟
+          <span class="text-[var(--ink-ghost)]">·</span> <span class="mono">quill.example.com</span>
+        </div>
+      </div>
+      <!-- 差异列表 -->
+      <div class="px-2 py-2 max-h-56 overflow-auto">
+        <div class="px-2 pt-1 pb-1.5 flex items-center gap-1.5 text-[11px] text-[var(--ink-faint)]">
+          <svg width="11" height="11"><use href="#i-up"/></svg>待推送 <span class="text-[var(--ink-soft)] font-medium">3</span>
+        </div>
+        <div class="space-y-px">
+          <div class="px-2 py-1 rounded flex items-center gap-2 hover:bg-[var(--paper-soft)]">
+            <svg width="11" height="11" class="text-[var(--accent)]"><use href="#i-dot"/></svg>
+            <span class="mono text-[11.5px] text-[var(--ink)] truncate">docs/plan.md</span>
+            <span class="flex-1"></span><span class="text-[11px] text-[var(--ink-faint)]">已修改</span>
+          </div>
+          <div class="px-2 py-1 rounded flex items-center gap-2 hover:bg-[var(--paper-soft)]">
+            <svg width="11" height="11" class="text-[var(--accent)]"><use href="#i-plus"/></svg>
+            <span class="mono text-[11.5px] text-[var(--ink)] truncate">drafts/idea.md</span>
+            <span class="flex-1"></span><span class="text-[11px] text-[var(--ink-faint)]">新增</span>
+          </div>
+          <div class="px-2 py-1 rounded flex items-center gap-2 hover:bg-[var(--paper-soft)]">
+            <svg width="11" height="11" class="text-[var(--ink-faint)]"><use href="#i-trash"/></svg>
+            <span class="mono text-[11.5px] text-[var(--ink-soft)] line-through truncate">old-draft.md</span>
+            <span class="flex-1"></span><span class="text-[11px] text-[var(--ink-faint)]">本地已删</span>
+          </div>
+        </div>
+        <div class="px-2 pt-3 pb-1.5 flex items-center gap-1.5 text-[11px] text-[var(--ink-faint)]">
+          <svg width="11" height="11"><use href="#i-down"/></svg>待拉取 <span class="text-[var(--ink-soft)] font-medium">1</span>
+        </div>
+        <div class="px-2 py-1 rounded flex items-center gap-2 hover:bg-[var(--paper-soft)]">
+          <svg width="11" height="11" class="text-[var(--ink-faint)]"><use href="#i-down"/></svg>
+          <span class="mono text-[11.5px] text-[var(--ink)] truncate">journal/2026-06.md</span>
+          <span class="flex-1"></span><span class="text-[11px] text-[var(--ink-faint)]">云端更新</span>
+        </div>
+      </div>
+      <!-- 操作 -->
+      <div class="px-4 py-3 border-t border-[var(--rule-soft)] flex items-center gap-2">
+        <button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--paper)] text-[12px] font-medium hover:opacity-90 transition">
+          <svg width="11" height="11"><use href="#i-up"/></svg>推送 3 项
+        </button>
+        <button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[var(--rule)] text-[var(--ink-soft)] text-[12px] hover:bg-[var(--paper-soft)] hover:text-[var(--ink)] transition">
+          <svg width="11" height="11"><use href="#i-down"/></svg>拉取 1 项
+        </button>
+      </div>
+      <div class="px-4 pb-3 flex items-center justify-between text-[11px] text-[var(--ink-faint)]">
+        <button class="hover:text-[var(--ink)] flex items-center gap-1"><svg width="10" height="10"><use href="#i-syncing"/></svg>立即检查</button>
+        <button class="hover:text-[var(--accent)]">关闭此文件夹的同步…</button>
+      </div>
+    </div>
+
+    <!-- 状态栏 -->
+    <div class="h-7 px-4 flex items-center gap-3 text-[11px] text-[var(--ink-faint)] border-t border-[var(--rule)] bg-[var(--paper-dim)]">
+      <span><span class="text-[var(--ink-soft)]">1,284</span> 字</span><span class="text-[var(--ink-ghost)]">·</span><span class="font-serif-zh italic">已保存</span>
+      <div class="flex-1"></div>
+      <button class="px-1 py-1 rounded flex items-center gap-1 text-[var(--accent)] bg-[var(--accent-soft)]/60">
+        <svg width="14" height="14"><use href="#i-sync-dirty"/></svg><span class="mono text-[10px] leading-none">↑3 ↓1</span>
+      </button>
+      <div class="w-px h-3.5 bg-[var(--rule)]"></div>
+      <span class="p-1"><svg width="14" height="14"><use href="#i-offline"/></svg></span>
+      <span class="p-1"><svg width="14" height="14"><use href="#i-sparkles"/></svg></span>
+      <span class="p-1"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ §3 popover 其它状态 ============ -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">3 · 面板的其它状态</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-6 max-w-[680px]">
+    同一个面板的五个分支：未开启（首次）、绑定已有空间（换电脑）、两端一致、冲突、未配置服务器。
+  </p>
+
+  <div class="grid grid-cols-2 gap-6">
+
+    <!-- 3a 未开启 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">a · 未开启 — 点击虚线云图标</p>
+      <div class="w-80 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px]">
+        <div class="px-4 pt-4 pb-3">
+          <div class="flex items-center gap-2 mb-1">
+            <svg width="15" height="15" class="text-[var(--ink-faint)]"><use href="#i-sync-off"/></svg>
+            <span class="font-medium text-[13px] text-[var(--ink)]">为「my-notes」开启云同步</span>
+          </div>
+          <p class="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)] leading-relaxed">
+            将此文件夹与服务器 <span class="mono not-italic">quill.example.com</span> 上的目录建立双向同步。开启记录保存在服务器，换电脑后仍可识别。
+          </p>
+        </div>
+        <div class="px-4 pb-3">
+          <label class="block text-[11px] text-[var(--ink-soft)] mb-1">云端目录（vault 根下）</label>
+          <input value="my-notes" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--paper)] mono text-[12px] border border-[var(--rule)] focus:outline-none focus:border-[var(--accent)]" />
+        </div>
+        <div class="px-4 pb-4">
+          <button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--paper)] text-[12px] font-medium hover:opacity-90 transition">
+            开启同步并首次推送
+          </button>
+          <p class="mt-2 text-[11px] text-[var(--ink-faint)] text-center">
+            或 <button class="underline decoration-[var(--ink-ghost)] hover:text-[var(--ink)]">绑定服务器上已有的同步空间…</button>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3b 绑定已有空间 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">b · 绑定已有空间 — 换电脑场景</p>
+      <div class="w-80 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px]">
+        <div class="px-4 pt-4 pb-2">
+          <div class="font-medium text-[13px] text-[var(--ink)] mb-1">服务器上的同步空间</div>
+          <p class="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)]">选择一个空间，把云端内容拉到当前文件夹，或直接拉取到新位置。</p>
+        </div>
+        <div class="px-2 pb-2 space-y-px">
+          <div class="px-2 py-2 rounded flex items-center gap-2.5 hover:bg-[var(--paper-soft)] cursor-pointer">
+            <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>
+            <div class="flex-1 min-w-0">
+              <div class="text-[12px] text-[var(--ink)]">my-notes</div>
+              <div class="text-[10.5px] text-[var(--ink-faint)] mono">/my-notes · 142 个文件 · 06-09 推送</div>
+            </div>
+            <span class="text-[10.5px] px-1.5 py-0.5 rounded bg-[var(--accent-soft)] text-[var(--accent)]">本机已绑定</span>
+          </div>
+          <div class="px-2 py-2 rounded flex items-center gap-2.5 hover:bg-[var(--paper-soft)] cursor-pointer">
+            <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>
+            <div class="flex-1 min-w-0">
+              <div class="text-[12px] text-[var(--ink)]">blog</div>
+              <div class="text-[10.5px] text-[var(--ink-faint)] mono">/blog · 36 个文件 · 05-28 推送</div>
+            </div>
+            <button class="text-[11px] px-2 py-0.5 rounded border border-[var(--rule)] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)]">拉取到本地…</button>
+          </div>
+        </div>
+        <div class="px-4 py-2.5 border-t border-[var(--rule-soft)] text-[11px] text-[var(--ink-faint)]">
+          <button class="hover:text-[var(--ink)]">← 返回</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3c 两端一致 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">c · 两端一致 — 安静收尾</p>
+      <div class="w-80 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px]">
+        <div class="px-4 pt-3.5 pb-3 border-b border-[var(--rule-soft)]">
+          <div class="flex items-center gap-2">
+            <svg width="14" height="14" class="text-[var(--ok)]"><use href="#i-sync-ok"/></svg>
+            <span class="font-medium text-[13px] text-[var(--ink)]">云同步</span>
+            <span class="font-display italic text-[12px] text-[var(--ink-faint)]">my-notes</span>
+            <div class="flex-1"></div>
+            <button class="p-1 rounded text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]"><svg width="12" height="12"><use href="#i-gear"/></svg></button>
+          </div>
+        </div>
+        <div class="px-4 py-5 text-center">
+          <p class="font-serif-zh italic text-[12.5px] text-[var(--ink-soft)]">本地与云端一致</p>
+          <p class="text-[11px] text-[var(--ink-faint)] mt-1">142 个文件 · 上次同步 今天 14:32</p>
+        </div>
+        <div class="px-4 pb-3 flex items-center justify-between text-[11px] text-[var(--ink-faint)]">
+          <button class="hover:text-[var(--ink)] flex items-center gap-1"><svg width="10" height="10"><use href="#i-syncing"/></svg>立即检查</button>
+          <button class="hover:text-[var(--accent)]">关闭此文件夹的同步…</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3d 冲突 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">d · 冲突 — 两端都改了同一文件</p>
+      <div class="w-80 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px]">
+        <div class="px-4 pt-3.5 pb-3 border-b border-[var(--rule-soft)]">
+          <div class="flex items-center gap-2">
+            <svg width="14" height="14" class="text-[var(--accent)]"><use href="#i-sync-conflict"/></svg>
+            <span class="font-medium text-[13px] text-[var(--ink)]">2 个文件两端都有改动</span>
+          </div>
+          <p class="mt-1 font-serif-zh italic text-[11px] text-[var(--ink-faint)]">
+            被覆盖的一侧会先备份为 <span class="mono not-italic">*.conflict-时间.md</span>，不会丢内容。
+          </p>
+        </div>
+        <div class="px-2 py-2 space-y-1">
+          <div class="px-2 py-1.5 rounded bg-[var(--accent-soft)]/40">
+            <div class="mono text-[11.5px] text-[var(--ink)]">notes/roadmap.md</div>
+            <div class="mt-1.5 flex items-center gap-1.5">
+              <button class="flex-1 px-2 py-1 rounded border border-[var(--rule)] text-[11px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)]">保留本地 ↑</button>
+              <button class="flex-1 px-2 py-1 rounded border border-[var(--rule)] text-[11px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)]">保留云端 ↓</button>
+            </div>
+          </div>
+          <div class="px-2 py-1.5 rounded bg-[var(--accent-soft)]/40">
+            <div class="mono text-[11.5px] text-[var(--ink)]">docs/api.md</div>
+            <div class="mt-1.5 flex items-center gap-1.5">
+              <button class="flex-1 px-2 py-1 rounded border border-[var(--rule)] text-[11px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)]">保留本地 ↑</button>
+              <button class="flex-1 px-2 py-1 rounded border border-[var(--rule)] text-[11px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)]">保留云端 ↓</button>
+            </div>
+          </div>
+        </div>
+        <div class="px-4 py-2.5 border-t border-[var(--rule-soft)] text-[11px] text-[var(--ink-faint)]">
+          解决全部冲突后，推送 / 拉取按钮恢复可用
+        </div>
+      </div>
+    </div>
+
+    <!-- 3e 未配置服务器 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">e · 尚未配置服务器 — 引导去设置</p>
+      <div class="w-80 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px]">
+        <div class="px-4 pt-4 pb-2 flex items-center gap-2">
+          <svg width="15" height="15" class="text-[var(--ink-ghost)]"><use href="#i-offline"/></svg>
+          <span class="font-medium text-[13px] text-[var(--ink)]">尚未配置远程服务器</span>
+        </div>
+        <p class="px-4 pb-3 font-serif-zh italic text-[11.5px] text-[var(--ink-faint)] leading-relaxed">
+          云同步需要一个 Quill 自部署服务。先在设置 → 远程里填好服务器地址与访问密码。
+        </p>
+        <div class="px-4 pb-4">
+          <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[var(--rule)] text-[12px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)] hover:text-[var(--ink)] transition">
+            <svg width="11" height="11"><use href="#i-gear"/></svg>打开设置 → 远程
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ §4 设置 ============ -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">4 · 设置 → 远程：新增「同步」区块</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    放在现有「远程」面板下方（同一服务器、同一凭据，不另开 tab）。自动同步是全局开关，
+    只作用于已开启同步的文件夹；空间列表读自服务器，跨设备一致。
+  </p>
+
+  <div class="border border-[var(--rule)] rounded-lg overflow-hidden flex bg-[var(--paper)]" style="min-height:460px">
+    <!-- settings nav -->
+    <nav class="w-[180px] shrink-0 border-r border-[var(--rule)] bg-[var(--paper-dim)] py-3 px-2">
+      <p class="font-display italic text-[12px] text-[var(--ink-faint)] px-3 py-1 mb-1">设置 / Settings</p>
+      <ul class="space-y-0.5 text-[13.5px]">
+        <li class="px-3 py-1.5 rounded-md text-[var(--ink-soft)]">通用<div class="font-display italic text-[11px] text-[var(--ink-faint)]">general</div></li>
+        <li class="px-3 py-1.5 rounded-md text-[var(--ink-soft)]">大模型供应商<div class="font-display italic text-[11px] text-[var(--ink-faint)]">AI providers</div></li>
+        <li class="px-3 py-1.5 rounded-md bg-[var(--paper-soft)] text-[var(--ink)] font-medium" style="box-shadow:inset 2px 0 0 var(--accent)">远程<div class="font-display italic text-[11px] text-[var(--ink-faint)] font-normal">remote · sync</div></li>
+        <li class="px-3 py-1.5 rounded-md text-[var(--ink-soft)]">帮助<div class="font-display italic text-[11px] text-[var(--ink-faint)]">help · about</div></li>
+      </ul>
+    </nav>
+    <!-- panel -->
+    <main class="flex-1 px-10 py-8 overflow-auto">
+      <div class="max-w-[520px]">
+        <div class="text-[12px] text-[var(--ink-ghost)] mb-4 font-serif-zh italic">（…现有「服务器 URL / 访问密码」区块保持原样…）</div>
+
+        <h3 class="font-display text-[20px] text-[var(--ink)] mb-1" style="font-weight:500">同步</h3>
+        <p class="font-serif-zh italic text-[12.5px] text-[var(--ink-faint)] mb-4">文件夹工作区 ↔ 云端 vault</p>
+
+        <!-- 自动同步 -->
+        <div class="flex items-start py-4 border-b border-[var(--rule-soft)]">
+          <div class="w-[140px] shrink-0 pt-1">
+            <div class="text-[13.5px] font-medium text-[var(--ink)]">自动同步</div>
+            <div class="font-serif-zh italic text-[12px] text-[var(--ink-faint)] mt-0.5">仅推拉无冲突的改动</div>
+          </div>
+          <div class="flex-1 pt-1">
+            <button class="relative inline-flex items-center w-10 h-5 rounded-full bg-[var(--accent)]">
+              <span class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[var(--paper)] shadow" style="transform:translate(22px,-50%)"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 间隔 -->
+        <div class="flex items-start py-4 border-b border-[var(--rule-soft)]">
+          <div class="w-[140px] shrink-0 pt-1">
+            <div class="text-[13.5px] font-medium text-[var(--ink)]">同步间隔</div>
+            <div class="font-serif-zh italic text-[12px] text-[var(--ink-faint)] mt-0.5">检查并同步的周期</div>
+          </div>
+          <div class="flex-1">
+            <div class="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-[var(--paper-soft)] text-[12.5px]">
+              <button class="px-3.5 py-1 rounded-full text-[var(--ink-soft)]">1 分钟</button>
+              <button class="px-3.5 py-1 rounded-full bg-[var(--ink)] text-[var(--paper)] font-medium">5 分钟</button>
+              <button class="px-3.5 py-1 rounded-full text-[var(--ink-soft)]">15 分钟</button>
+              <button class="px-3.5 py-1 rounded-full text-[var(--ink-soft)]">30 分钟</button>
+            </div>
+            <p class="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)] mt-2">
+              冲突永远不会被自动覆盖，需要在同步面板里手动处理。
+            </p>
+          </div>
+        </div>
+
+        <!-- 空间列表 -->
+        <div class="flex items-start py-4">
+          <div class="w-[140px] shrink-0 pt-1">
+            <div class="text-[13.5px] font-medium text-[var(--ink)]">同步空间</div>
+            <div class="font-serif-zh italic text-[12px] text-[var(--ink-faint)] mt-0.5">记录在服务器，跨设备可见</div>
+          </div>
+          <div class="flex-1 space-y-1.5">
+            <div class="px-3 py-2 rounded-md border border-[var(--rule-soft)] bg-[var(--paper-dim)] flex items-center gap-2.5">
+              <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>
+              <div class="flex-1 min-w-0">
+                <div class="text-[12.5px] text-[var(--ink)]">my-notes <span class="mono text-[10.5px] text-[var(--ink-faint)]">→ /my-notes</span></div>
+                <div class="text-[10.5px] text-[var(--ink-faint)] mono truncate">本机 ~/Documents/my-notes · 自动同步中</div>
+              </div>
+              <button class="p-1 rounded text-[var(--ink-ghost)] hover:text-[var(--accent)]" title="解除同步（不删任何文件）"><svg width="11" height="11"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="px-3 py-2 rounded-md border border-[var(--rule-soft)] bg-[var(--paper-dim)] flex items-center gap-2.5">
+              <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>
+              <div class="flex-1 min-w-0">
+                <div class="text-[12.5px] text-[var(--ink)]">blog <span class="mono text-[10.5px] text-[var(--ink-faint)]">→ /blog</span></div>
+                <div class="text-[10.5px] text-[var(--ink-faint)] font-serif-zh italic">本机未绑定（其它设备开启）</div>
+              </div>
+              <button class="text-[11px] px-2 py-0.5 rounded border border-[var(--rule)] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)]">拉取到本地…</button>
+              <button class="p-1 rounded text-[var(--ink-ghost)] hover:text-[var(--accent)]"><svg width="11" height="11"><use href="#i-x"/></svg></button>
+            </div>
+            <p class="font-serif-zh italic text-[11px] text-[var(--ink-faint)] pt-1">
+              解除同步只移除服务器上的记录，本地与云端文件都不会被删除。
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<!-- ============ §5 机制说明 ============ -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">5 · 数据落点与同步模型（实现约定）</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    回答「记录存哪」：分三层。同步算法直接沿用 docs/web-server.md 已定的三方 hash 比对模型，
+    服务端 API（/index 带 hash、PUT/DELETE 带 If-Match）现在就够用，无需新增文件接口。
+  </p>
+
+  <div class="grid grid-cols-3 gap-4 text-[12.5px] mb-8">
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] text-[var(--ink) ] mb-1.5">① 服务器 · 同步空间注册表</div>
+      <div class="mono text-[11px] text-[var(--ink-faint)] mb-2">GET/PUT /api/sync/spaces（新增）</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        <span class="mono text-[11px]">[{ id, name, remotePath, createdAt }]</span><br>
+        哪些空间开启过同步。换电脑连同一服务器就能看到并拉取。
+      </p>
+    </div>
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] text-[var(--ink)] mb-1.5">② 工作区内 · 绑定 + 索引</div>
+      <div class="mono text-[11px] text-[var(--ink-faint)] mb-2">&lt;folder&gt;/.quill/sync.json</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        <span class="mono text-[11px]">{ spaceId, serverUrl, files: { path: hashAtLastSync } }</span><br>
+        本地文件夹 ↔ 空间的绑定关系和上次同步指纹。文件夹整体拷到新机器也能识别。
+      </p>
+    </div>
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] text-[var(--ink)] mb-1.5">③ 桌面端 · 全局偏好</div>
+      <div class="mono text-[11px] text-[var(--ink-faint)] mb-2">electron-store（现有 prefs）</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        <span class="mono text-[11px]">{ autoSync: true, intervalMin: 5 }</span><br>
+        自动同步开关与间隔。设备级设置，不随空间走。
+      </p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-8">
+    <div>
+      <h3 class="font-display text-[17px] mb-3" style="font-weight:500">状态判定（沿用已有设计）</h3>
+      <table class="w-full text-[12px] border-collapse">
+        <thead><tr class="text-left text-[11px] text-[var(--ink-faint)] border-b border-[var(--rule)]">
+          <th class="py-1.5 pr-2 font-normal">状态</th><th class="py-1.5 pr-2 font-normal">判定</th><th class="py-1.5 font-normal">归入</th>
+        </tr></thead>
+        <tbody class="text-[var(--ink-soft)]">
+          <tr class="border-b border-[var(--rule-soft)]"><td class="py-1.5 pr-2">synced</td><td class="mono text-[11px]">local == remote == lastSync</td><td>—</td></tr>
+          <tr class="border-b border-[var(--rule-soft)]"><td class="py-1.5 pr-2">local-modified / local-only / local-deleted</td><td class="mono text-[11px]">仅本地偏离 lastSync</td><td>待推送 ↑</td></tr>
+          <tr class="border-b border-[var(--rule-soft)]"><td class="py-1.5 pr-2">remote-modified / cloud-only / remote-deleted</td><td class="mono text-[11px]">仅云端偏离 lastSync</td><td>待拉取 ↓</td></tr>
+          <tr><td class="py-1.5 pr-2">conflict</td><td class="mono text-[11px]">两端都偏离 lastSync</td><td>手动处理</td></tr>
+        </tbody>
+      </table>
+      <p class="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)] mt-3 leading-relaxed">
+        推送一律带 <span class="mono not-italic">If-Match</span>；412 即转冲突，绝不覆盖。
+        被覆盖侧先落 <span class="mono not-italic">*.conflict-&lt;时间&gt;.md</span> 备份。
+      </p>
+    </div>
+    <div>
+      <h3 class="font-display text-[17px] mb-3" style="font-weight:500">关键交互流程</h3>
+      <ol class="space-y-2.5 text-[12.5px] text-[var(--ink-soft)] list-none">
+        <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">01</span>
+          打开本地文件夹 → 发现 <span class="mono text-[11px]">.quill/sync.json</span> 且服务器可达 → 自动恢复同步状态，后台静默检查一次。</li>
+        <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">02</span>
+          首次开启 → 在云端 <span class="mono text-[11px]">/&lt;目录&gt;</span> 创建空间 + 注册表登记 → 整体首次推送。</li>
+        <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">03</span>
+          ⌘S 保存只写本地（现状不变）；保存后将该文件标记 dirty，指示器变 accent。自动同步到点或手动点推送才上云。</li>
+        <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">04</span>
+          换电脑 → 设置或面板里看到服务器上的空间 → 「拉取到本地…」选目标文件夹 → 写入 <span class="mono text-[11px]">.quill/sync.json</span>，之后照常推拉。</li>
+        <li class="flex gap-2.5"><span class="font-display text-[var(--ink-faint)] shrink-0">05</span>
+          单文件模式 / 远程模式：不出现同步指示器（远程模式本身就是直接读写云端）。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="max-w-[1080px] mx-auto px-8 pb-16">
+  <p class="font-serif-zh italic text-[12px] text-[var(--ink-ghost)] border-t border-[var(--rule-soft)] pt-4">
+    Quill · sync.html · 图标为 lucide 风格自绘，实现时用 lucide-react（Cloud 底座 + 叠加 glyph，或 CloudCheck / CloudAlert / CloudOff / RefreshCw）
+  </p>
+</footer>
+
+</body>
+</html>

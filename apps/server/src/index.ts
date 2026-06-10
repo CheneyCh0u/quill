@@ -5,6 +5,7 @@ import { cors } from 'hono/cors'
 import { loadConfig } from './config'
 import { createAuthRoutes } from './auth-routes'
 import { createVaultRoutes } from './vault'
+import { createSyncSpaceRoutes } from './sync-spaces'
 import { createAgentRoutes } from './agent'
 import { ProvidersStore } from './providers-store'
 import { requireSession } from './auth'
@@ -62,6 +63,13 @@ vaultApp.use('*', requireSession(config.auth.session_secret))
 vaultApp.route('/', createVaultRoutes(config.vault.path))
 app.route('/api/vault', vaultApp)
 
+// Sync space registry — which folder workspaces opted into sync. Same
+// session gate as the vault; stored in STATE_DIR, not in the vault.
+const syncApp = new Hono()
+syncApp.use('*', requireSession(config.auth.session_secret))
+syncApp.route('/', createSyncSpaceRoutes(join(STATE_DIR, 'sync-spaces.json')))
+app.route('/api/sync/spaces', syncApp)
+
 // Agent — REST provider catalog + WebSocket run/cancel/approval stream.
 // The agent routes module owns its own session-check middleware because
 // the WS upgrade has to verify before the protocol switch.
@@ -86,6 +94,12 @@ try {
 if (webDistAvailable) {
   app.get('/*', async (c) => {
     const url = new URL(c.req.url)
+    // Unknown /api/* paths must 404 as JSON, never fall through to the
+    // SPA shell — an HTML 200 on an API route masks "this server build
+    // doesn't have that endpoint yet" from clients and debuggers.
+    if (url.pathname.startsWith('/api/')) {
+      return c.json({ error: 'not found' }, 404)
+    }
     // Strip leading slash; default to index.html for the root.
     const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1)
     const candidate = join(WEB_DIST, requested)

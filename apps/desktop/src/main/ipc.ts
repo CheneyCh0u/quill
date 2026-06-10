@@ -21,6 +21,19 @@ import {
   setRemoteToken,
   clearRemote
 } from './remote-store'
+import {
+  checkStatus,
+  enableSync,
+  bindSpace,
+  pushAll,
+  pullAll,
+  resolveConflict,
+  disableSync,
+  listSpaces,
+  removeSpace,
+  type RemoteConfig
+} from './sync/engine'
+import { readSyncFile } from './sync/bind-store'
 import { AgentRuntime, createContextStore, type CredentialProvider } from '@quill/agent'
 import {
   getFileType,
@@ -256,6 +269,78 @@ export function registerIpc(): void {
     setRemoteToken(token)
   )
   ipcMain.handle('remote:clear', async () => clearRemote())
+
+  // -------- Folder-workspace cloud sync ---------------------------------
+  // Engine lives in ./sync (electron-free); these handlers only add the
+  // saved server credentials. A bound folder without usable credentials
+  // reads as offline so the UI can point at Settings → 远程.
+  const syncCfg = async (): Promise<RemoteConfig | null> => {
+    const [url, token] = await Promise.all([getRemoteUrl(), getRemoteToken()])
+    return url && token ? { serverUrl: url, token } : null
+  }
+  const NO_SERVER = '未配置远程服务器'
+
+  ipcMain.handle('sync:status', async (_evt, root: string) => {
+    const cfg = await syncCfg()
+    if (cfg) return checkStatus(root, cfg)
+    const bound = await readSyncFile(root)
+    if (!bound) return { state: 'disabled' }
+    return {
+      state: 'offline',
+      binding: {
+        spaceId: bound.spaceId,
+        serverUrl: bound.serverUrl,
+        remotePath: bound.remotePath
+      },
+      error: NO_SERVER
+    }
+  })
+
+  const requireCfg = async (): Promise<RemoteConfig> => {
+    const cfg = await syncCfg()
+    if (!cfg) throw new Error(NO_SERVER)
+    return cfg
+  }
+
+  ipcMain.handle(
+    'sync:enable',
+    async (_evt, args: { root: string; name: string; remotePath: string }) =>
+      enableSync(args.root, await requireCfg(), {
+        name: args.name,
+        remotePath: args.remotePath
+      })
+  )
+  ipcMain.handle(
+    'sync:bind',
+    async (_evt, args: { root: string; space: import('@quill/shared-types').SyncSpace }) =>
+      bindSpace(args.root, await requireCfg(), args.space)
+  )
+  ipcMain.handle('sync:push', async (_evt, root: string) =>
+    pushAll(root, await requireCfg())
+  )
+  ipcMain.handle('sync:pull', async (_evt, root: string) =>
+    pullAll(root, await requireCfg())
+  )
+  ipcMain.handle(
+    'sync:resolve',
+    async (_evt, args: { root: string; path: string; keep: 'local' | 'remote' }) =>
+      resolveConflict(args.root, await requireCfg(), args.path, args.keep)
+  )
+  ipcMain.handle(
+    'sync:disable',
+    async (_evt, args: { root: string; removeSpace: boolean }) => {
+      // Unbinding locally must work even without server credentials;
+      // only dropping the registry entry needs them.
+      const cfg = args.removeSpace
+        ? await requireCfg()
+        : ((await syncCfg()) ?? { serverUrl: '', token: '' })
+      return disableSync(args.root, cfg, { removeSpace: args.removeSpace })
+    }
+  )
+  ipcMain.handle('sync:spaces', async () => listSpaces(await requireCfg()))
+  ipcMain.handle('sync:removeSpace', async (_evt, id: string) =>
+    removeSpace(await requireCfg(), id)
+  )
 
   // -------- Agent runtime ----------------------------------------------
   // Renderer fires `agent:run` with a generated runId + args; main streams
