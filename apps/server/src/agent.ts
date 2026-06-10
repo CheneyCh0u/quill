@@ -21,6 +21,11 @@ export type AgentDeps = {
   /** The server's vault root. Always overrides client-supplied scope.root —
    *  the client must not get to point the agent at arbitrary fs paths. */
   vaultRoot: string
+  /** Map a run's workspaceId to its directory under the vault root
+   *  (undefined id → the default workspace). null = unknown id, the run
+   *  is rejected. Falls back to the vault root when not provided (tests
+   *  that don't care about workspaces). */
+  resolveWorkspaceRoot?: (workspaceId: string | undefined) => Promise<string | null>
 }
 
 /**
@@ -46,10 +51,8 @@ export function createAgentRoutes(
     }
   }
   const runtime = new AgentRuntime({ credentials })
-  const serverScope = {
-    kind: 'workspace' as const,
-    root: deps.vaultRoot
-  }
+  const resolveRoot =
+    deps.resolveWorkspaceRoot ?? (async () => deps.vaultRoot)
   const { upgradeWebSocket, websocket } = createBunWebSocket()
 
   const app = new Hono()
@@ -148,15 +151,32 @@ export function createAgentRoutes(
           switch (msg.type) {
             case 'run': {
               ownedRuns.add(msg.runId)
-              // Force scope to the server's vault root. Clients can't be
-              // trusted to nominate where the agent operates — that's a
-              // path-traversal security boundary.
-              const args = { ...msg.args, scope: serverScope }
-              void runtime
-                .runAgent(msg.runId, args, (event) =>
-                  sendEvent(ws, msg.runId, event)
-                )
-                .finally(() => ownedRuns.delete(msg.runId))
+              // Scope is server-decided, never client-supplied: resolve
+              // the run's workspaceId against the registry and pin
+              // scope.root to that workspace directory. That's both the
+              // path-traversal boundary and the per-workspace permission
+              // model — the agent cannot see outside its workspace.
+              void resolveRoot(msg.workspaceId)
+                .then((root) => {
+                  if (root === null) {
+                    sendEvent(ws, msg.runId, {
+                      type: 'error',
+                      message: `unknown workspace: ${msg.workspaceId}`
+                    })
+                    ownedRuns.delete(msg.runId)
+                    return
+                  }
+                  const args = {
+                    ...msg.args,
+                    scope: { kind: 'workspace' as const, root }
+                  }
+                  return runtime
+                    .runAgent(msg.runId, args, (event) =>
+                      sendEvent(ws, msg.runId, event)
+                    )
+                    .finally(() => ownedRuns.delete(msg.runId))
+                })
+                .catch(() => ownedRuns.delete(msg.runId))
               return
             }
             case 'cancel': {

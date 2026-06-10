@@ -27,7 +27,7 @@ export type { ThemeDef, ThemeMode, ThemePref, ThemeTokens, BuiltinThemeId } from
 export type {
   SyncStatus,
   SyncEntry,
-  SyncSpace,
+  Workspace,
   SyncBinding,
   SyncSnapshot
 } from './sync'
@@ -179,7 +179,15 @@ export type CompressionRunArgs = {
 // ============================================================
 
 export type ClientAgentMessage =
-  | { type: 'run'; runId: string; args: AgentRunArgs }
+  | {
+      type: 'run'
+      runId: string
+      args: AgentRunArgs
+      /** Cloud workspace the run is scoped to. The server resolves it to
+       *  vault/<workspace dir> and overrides args.scope.root; omitted →
+       *  the default workspace. Unknown ids are rejected. */
+      workspaceId?: string
+    }
   | { type: 'cancel'; runId: string }
   | {
       type: 'approval'

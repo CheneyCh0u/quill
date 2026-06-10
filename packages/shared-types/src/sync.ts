@@ -20,13 +20,22 @@ export type SyncEntry = {
   status: SyncStatus
 }
 
-/** Registry entry on the server (STATE_DIR/sync-spaces.json). */
-export type SyncSpace = {
+/**
+ * A cloud workspace: a first-level directory under the server vault
+ * root. One registry serves two consumers — the web/desktop-remote
+ * workspace switcher, and the desktop folder-sync binding (a synced
+ * folder IS a workspace). Stored in STATE_DIR/workspaces.json.
+ */
+export type Workspace = {
   id: string
   name: string
-  /** Directory under the server vault root this space maps to. */
+  /** Directory under the server vault root this workspace maps to. */
   remotePath: string
+  /** The built-in `quill` workspace — cannot be deleted or renamed. */
+  default?: boolean
   createdAt: number
+  /** Recursive file count, computed by the server on list. */
+  fileCount?: number
 }
 
 /** Binding stored inside the workspace folder (.quill/sync.json),
