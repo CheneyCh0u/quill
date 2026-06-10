@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>云端工作区 · 设计稿 — Quill</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Geist:wght@300..700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:oklch(0.974 0.012 86); --paper-dim:oklch(0.952 0.014 84);
+    --paper-soft:oklch(0.928 0.016 80); --paper-edge:oklch(0.892 0.018 76);
+    --ink:oklch(0.225 0.018 50); --ink-soft:oklch(0.42 0.014 50);
+    --ink-faint:oklch(0.62 0.010 50); --ink-ghost:oklch(0.78 0.008 50);
+    --rule:oklch(0.88 0.014 75); --rule-soft:oklch(0.92 0.012 78);
+    --accent:oklch(0.55 0.16 28); --accent-soft:oklch(0.93 0.04 35);
+  }
+  .dark-theme{
+    --paper:oklch(0.178 0.012 248); --paper-dim:oklch(0.206 0.012 248);
+    --paper-soft:oklch(0.238 0.014 250); --paper-edge:oklch(0.282 0.015 250);
+    --ink:oklch(0.924 0.008 80); --ink-soft:oklch(0.74 0.008 80);
+    --ink-faint:oklch(0.54 0.008 80); --ink-ghost:oklch(0.40 0.008 80);
+    --rule:oklch(0.30 0.012 248); --rule-soft:oklch(0.26 0.012 248);
+    --accent:oklch(0.78 0.14 40); --accent-soft:oklch(0.30 0.08 35);
+  }
+  body{ background:var(--paper); color:var(--ink); font-family:"Geist","Noto Serif SC",system-ui,sans-serif; }
+  .font-display{ font-family:"Fraunces","Noto Serif SC",Georgia,serif; }
+  .font-serif-zh{ font-family:"Noto Serif SC","Fraunces",Georgia,serif; }
+  .mono{ font-family:"JetBrains Mono",Menlo,monospace; }
+  .pop-shadow{ box-shadow:0 8px 28px oklch(0 0 0 / 0.14), 0 2px 6px oklch(0 0 0 / 0.08); }
+  svg{ flex-shrink:0; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></g></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g></symbol>
+</svg>
+
+<header class="max-w-[1080px] mx-auto px-8 pt-12 pb-8 flex items-end justify-between">
+  <div>
+    <p class="font-display italic text-[13px] text-[var(--ink-faint)] mb-1">Quill · 设计稿 · 2026-06</p>
+    <h1 class="font-display text-[40px] leading-tight" style="font-weight:500">云端工作区</h1>
+    <p class="font-serif-zh italic text-[14px] text-[var(--ink-soft)] mt-2 max-w-[660px]">
+      vault 按工作区（根下一级目录）划分，web 端与桌面远程模式可切换、新建；
+      <b>云端工作区与桌面同步空间是同一个东西</b>，agent 权限域收敛到当前工作区。
+    </p>
+  </div>
+  <button onclick="document.documentElement.classList.toggle('dark-theme')"
+    class="px-3 py-1.5 rounded-md border border-[var(--rule)] text-[12px] text-[var(--ink-soft)] hover:bg-[var(--paper-soft)] transition">浅 / 深</button>
+</header>
+
+<main class="max-w-[1080px] mx-auto px-8 pb-24 space-y-16">
+
+<!-- §1 web 切换器 -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">1 · Web 端：侧栏头部即切换器</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    现在侧栏头部是写死的「Quill」字标。改为工作区切换器（Notion / Linear 范式）：
+    显示当前工作区名 + chevron，点击下拉列出全部工作区、勾选当前项、底部「新建工作区」。
+    文件树、agent、面包屑都跟随切换。默认进 quill 工作区，上次选择记 localStorage。
+  </p>
+
+  <div class="flex gap-8 items-start">
+    <!-- PC 侧栏 + 下拉展开态 -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">a · PC（md+）侧栏，下拉展开态</p>
+      <div class="relative w-72 border border-[var(--rule)] rounded-lg bg-[var(--paper-dim)] overflow-visible" style="height:420px">
+        <!-- header -->
+        <div class="h-12 flex items-center gap-2 px-3 border-b border-[var(--rule-soft)]">
+          <button class="flex-1 min-w-0 flex items-center gap-1.5 px-1.5 py-1 -ml-1.5 rounded-md bg-[var(--paper-soft)] text-left">
+            <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-cloud"/></svg>
+            <span class="font-display text-[16px] text-[var(--ink)] truncate">quill</span>
+            <svg width="12" height="12" class="text-[var(--ink-faint)] rotate-180"><use href="#i-chevron"/></svg>
+          </button>
+          <button class="text-xs text-[var(--ink-faint)] hover:text-[var(--accent)] px-2 py-1 shrink-0">登出</button>
+        </div>
+        <!-- 文件树（变淡示意） -->
+        <div class="py-2 text-[12.5px] text-[var(--ink-soft)] opacity-40 space-y-px">
+          <div class="px-3 py-1 flex items-center gap-1.5"><svg width="12" height="12"><use href="#i-folder"/></svg>notes</div>
+          <div class="px-3 py-1 pl-7">readme.md</div>
+          <div class="px-3 py-1 pl-7">plan.md</div>
+          <div class="px-3 py-1">h.md</div>
+          <div class="px-3 py-1">1.json</div>
+        </div>
+        <!-- 下拉 -->
+        <div class="absolute left-3 right-3 top-12 mt-1 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12.5px] z-10">
+          <p class="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">workspaces</p>
+          <div class="px-1.5 pb-1 space-y-px">
+            <div class="px-2 py-1.5 rounded-md bg-[var(--paper-soft)] flex items-center gap-2">
+              <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>
+              <span class="flex-1 text-[var(--ink)]">quill</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-[var(--paper-edge)] text-[var(--ink-faint)]">默认</span>
+              <svg width="13" height="13" class="text-[var(--accent)]"><use href="#i-check"/></svg>
+            </div>
+            <div class="px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 cursor-pointer">
+              <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>
+              <span class="flex-1 text-[var(--ink-soft)]">langgraph-learning</span>
+              <span class="text-[10px] text-[var(--ink-ghost)] mono">142 文件</span>
+            </div>
+            <div class="px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 cursor-pointer">
+              <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-folder"/></svg>
+              <span class="flex-1 text-[var(--ink-soft)]">blog</span>
+              <span class="text-[10px] text-[var(--ink-ghost)] mono">36 文件</span>
+            </div>
+          </div>
+          <div class="border-t border-[var(--rule-soft)] px-1.5 py-1">
+            <button class="w-full px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 text-[var(--ink-soft)] hover:text-[var(--ink)]">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>新建工作区…
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新建 dialog -->
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">b · 新建工作区（web 与桌面远程共用样式）</p>
+      <div class="w-80 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12px]">
+        <div class="px-4 pt-4 pb-2">
+          <div class="font-medium text-[13.5px] text-[var(--ink)] mb-1">新建工作区</div>
+          <p class="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)]">
+            在 vault 根下创建同名目录。之后可在桌面端把本地文件夹同步绑定到它。
+          </p>
+        </div>
+        <div class="px-4 pb-3">
+          <label class="block text-[11px] text-[var(--ink-soft)] mb-1">名称（即目录名）</label>
+          <input value="research" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--paper)] mono text-[12px] border border-[var(--rule)] focus:outline-none focus:border-[var(--accent)]" />
+          <p class="mt-1 text-[10.5px] text-[var(--ink-faint)] mono">→ vault/research/</p>
+        </div>
+        <div class="px-4 pb-4 flex items-center gap-2 justify-end">
+          <button class="px-3 py-1.5 rounded-md text-[12px] text-[var(--ink-soft)] border border-[var(--rule)] hover:bg-[var(--paper-soft)]">取消</button>
+          <button class="px-3 py-1.5 rounded-md bg-[var(--accent)] text-[var(--paper)] text-[12px] font-medium hover:opacity-90">创建并切换</button>
+        </div>
+      </div>
+      <p class="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)] mt-3 max-w-[320px]">
+        校验同注册表：重名 409、非法路径 400。默认工作区 quill 不可删除；
+        其它工作区的删除仍走设置页（即现有「同步空间」列表，仅删记录不删文件）。
+      </p>
+    </div>
+  </div>
+
+  <!-- H5 -->
+  <div class="mt-8">
+    <p class="text-[12px] text-[var(--ink-soft)] mb-2">c · H5 全屏抽屉 —— 同一切换器，375px 不变形</p>
+    <div class="relative w-[375px] border border-[var(--rule)] rounded-lg bg-[var(--paper-dim)] overflow-hidden" style="height:240px">
+      <div class="h-12 flex items-center gap-2 px-3 border-b border-[var(--rule-soft)]">
+        <button class="text-[var(--ink-soft)] text-lg leading-none px-1">✕</button>
+        <button class="flex-1 min-w-0 flex items-center gap-1.5 px-1.5 py-1 rounded-md text-left">
+          <svg width="13" height="13" class="text-[var(--ink-faint)]"><use href="#i-cloud"/></svg>
+          <span class="font-display text-[16px] text-[var(--ink)] truncate">langgraph-learning</span>
+          <svg width="12" height="12" class="text-[var(--ink-faint)]"><use href="#i-chevron"/></svg>
+        </button>
+        <button class="text-xs text-[var(--ink-faint)] px-2 py-1 shrink-0">登出</button>
+      </div>
+      <div class="py-2 text-[13px] text-[var(--ink-soft)] space-y-px">
+        <div class="px-3 py-1.5 flex items-center gap-1.5"><svg width="12" height="12"><use href="#i-folder"/></svg>notebooks</div>
+        <div class="px-3 py-1.5 pl-7">01-intro.md</div>
+        <div class="px-3 py-1.5 pl-7">02-graphs.md</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- §2 桌面远程模式 -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">2 · 桌面端远程模式：同一个切换器进侧栏头</h2>
+  <p class="font-serif-zh italic text-[13px] text-[var(--ink-faint)] mb-5 max-w-[680px]">
+    点右下角云图标进远程模式后，侧栏头部现在显示 server 主机名。改为：上行小字
+    「workspace · 主机名」，下行当前云端工作区名 + chevron，点击弹同款下拉（切换 / 新建）。
+    本地文件夹模式的侧栏头不变。
+  </p>
+
+  <div class="flex gap-8 items-start">
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">a · 远程模式侧栏头（收起态）</p>
+      <div class="w-64 border border-[var(--rule)] rounded-lg bg-[var(--paper-dim)]">
+        <div class="px-3 py-3 flex items-start gap-1 border-b border-[var(--rule)]">
+          <div class="flex-1 min-w-0 mr-1">
+            <div class="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] flex items-center gap-1">
+              <svg width="9" height="9"><use href="#i-cloud"/></svg>remote · 47.79.23.167
+            </div>
+            <button class="mt-0.5 flex items-center gap-1 max-w-full group">
+              <span class="font-display text-[14px] text-[var(--ink)] truncate">quill</span>
+              <span class="text-[9px] px-1 py-px rounded bg-[var(--paper-edge)] text-[var(--ink-faint)]">默认</span>
+              <svg width="11" height="11" class="text-[var(--ink-faint)] group-hover:text-[var(--ink)]"><use href="#i-chevron"/></svg>
+            </button>
+          </div>
+          <span class="p-1 text-[var(--ink-faint)]"><svg width="13" height="13"><use href="#i-folder"/></svg></span>
+        </div>
+        <div class="py-2 text-[12.5px] text-[var(--ink-soft)] opacity-60 space-y-px">
+          <div class="px-3 py-1 flex items-center gap-1.5"><svg width="12" height="12"><use href="#i-folder"/></svg>notes</div>
+          <div class="px-3 py-1 pl-7">h.md</div>
+          <div class="px-3 py-1 pl-7">1.json</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="text-[12px] text-[var(--ink-soft)] mb-2">b · 点击工作区名 → 下拉（与 web 同款）</p>
+      <div class="w-64 rounded-lg border border-[var(--rule)] bg-[var(--paper)] pop-shadow text-[12.5px]">
+        <p class="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">cloud workspaces</p>
+        <div class="px-1.5 pb-1 space-y-px">
+          <div class="px-2 py-1.5 rounded-md bg-[var(--paper-soft)] flex items-center gap-2">
+            <span class="flex-1 text-[var(--ink)]">quill</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-[var(--paper-edge)] text-[var(--ink-faint)]">默认</span>
+            <svg width="13" height="13" class="text-[var(--accent)]"><use href="#i-check"/></svg>
+          </div>
+          <div class="px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 cursor-pointer">
+            <span class="flex-1 text-[var(--ink-soft)]">langgraph-learning</span>
+            <span class="text-[10px] text-[var(--ink-ghost)] mono">已绑定本机同步</span>
+          </div>
+        </div>
+        <div class="border-t border-[var(--rule-soft)] px-1.5 py-1">
+          <button class="w-full px-2 py-1.5 rounded-md hover:bg-[var(--paper-soft)] flex items-center gap-2 text-[var(--ink-soft)]">
+            <svg width="12" height="12"><use href="#i-plus"/></svg>新建工作区…
+          </button>
+        </div>
+      </div>
+      <p class="font-serif-zh italic text-[11.5px] text-[var(--ink-faint)] mt-3 max-w-[260px]">
+        切换 = 换 RemoteVault 的 rootPath 重载文件树；未保存改动沿用现有「放弃确认」。
+        远程模式没有本地 agent（现状），不受影响。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- §3 agent 权限域 -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">3 · Agent 权限域：钉死在当前工作区</h2>
+  <div class="flex gap-6 items-start mt-4">
+    <div class="flex-1 p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)] text-[12.5px]">
+      <div class="flex items-center gap-2 mb-2 text-[13px] font-medium text-[var(--ink)]">
+        <svg width="14" height="14" class="text-[var(--ink-faint)]"><use href="#i-bot"/></svg>现状
+      </div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        web 端 agent run 时 server <span class="mono text-[11px]">强制 scope.root = vault 根</span>，
+        即 agent 可读写整个 vault 任意文件。
+      </p>
+    </div>
+    <div class="flex-1 p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)] text-[12.5px]">
+      <div class="flex items-center gap-2 mb-2 text-[13px] font-medium text-[var(--ink)]">
+        <svg width="14" height="14" class="text-[var(--accent)]"><use href="#i-lock"/></svg>改为
+      </div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        run 消息带 <span class="mono text-[11px]">workspaceId</span>，server 对照注册表校验后
+        <span class="mono text-[11px]">scope.root = vault/&lt;工作区目录&gt;</span>。
+        非法 / 不存在的 id 直接拒绝。agent 工具的路径守卫保证不越界。
+      </p>
+    </div>
+  </div>
+  <p class="font-serif-zh italic text-[12px] text-[var(--ink-faint)] mt-3">
+    web 端 AI 面板顶部加一行权限提示：<span class="not-italic mono text-[11px]">agent 可访问：/quill</span>，切工作区时对话按现有 scope 机制重置。
+  </p>
+</section>
+
+<!-- §4 数据与迁移 -->
+<section>
+  <h2 class="font-display text-[24px] mb-1" style="font-weight:500">4 · 数据模型与迁移（实现约定）</h2>
+  <div class="grid grid-cols-3 gap-4 text-[12.5px] mt-4 mb-6">
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] mb-1.5">① 注册表统一升级</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        <span class="mono text-[11px]">/api/sync/spaces → /api/workspaces</span>（路由改名，桌面端引擎同步更新）。
+        条目即工作区：<span class="mono text-[11px]">{id, name, remotePath, default?, createdAt}</span>。
+        桌面「同步空间」改叫「云端工作区」，同一份数据。
+      </p>
+    </div>
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] mb-1.5">② 默认工作区 quill</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        server 启动时确保存在：注册表条目（<span class="mono text-[11px]">default: true</span>，不可删）+
+        <span class="mono text-[11px]">vault/quill/</span> 目录。web 未选择过工作区时进它。
+      </p>
+    </div>
+    <div class="p-4 rounded-lg border border-[var(--rule-soft)] bg-[var(--paper-dim)]">
+      <div class="font-medium text-[13px] mb-1.5">③ 一次性迁移</div>
+      <p class="text-[var(--ink-soft)] leading-relaxed">
+        启动时 vault 根下<b>不属于任何已注册工作区</b>的散文件 / 目录，整体移入
+        <span class="mono text-[11px]">quill/</span> 并打日志。你服务器上的
+        <span class="mono text-[11px]">1.json、2.json、h.md</span> 会进默认工作区，web 上不丢内容。
+      </p>
+    </div>
+  </div>
+  <p class="font-serif-zh italic text-[12.5px] text-[var(--ink-faint)] max-w-[720px]">
+    RemoteVault 增加 rootPath（工作区目录前缀），list/read/write/move 全部自动加前缀，
+    web 与桌面远程模式共用；vault API 本身不动。桌面端本地文件夹同步（上一期功能）行为不变，
+    只是绑定对象的叫法从「同步空间」变成「云端工作区」。
+  </p>
+</section>
+
+</main>
+
+<footer class="max-w-[1080px] mx-auto px-8 pb-16">
+  <p class="font-serif-zh italic text-[12px] text-[var(--ink-ghost)] border-t border-[var(--rule-soft)] pt-4">
+    Quill · cloud-workspaces.html · 与 docs/mockups/sync.html 同一套 token
+  </p>
+</footer>
+
+</body>
+</html>
