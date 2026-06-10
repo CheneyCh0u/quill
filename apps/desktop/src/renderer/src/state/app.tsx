@@ -9,8 +9,14 @@ import {
   useState,
   type ReactNode
 } from 'react'
-import type { FileNode, ViewMode } from '../types'
-import { ipc, switchToLocal } from '../lib/ipc'
+import type { FileNode, ViewMode, Workspace as CloudWorkspace } from '../types'
+import { ipc, switchToLocal, switchToRemote } from '../lib/ipc'
+import {
+  fetchCloudWorkspaces,
+  pickCloudWorkspace,
+  readStoredCloudWorkspaceId,
+  storeCloudWorkspaceId
+} from '../lib/cloudWorkspaces'
 import { addRecent, removeRecent } from '../lib/recent'
 import { validateRenameTarget } from '../lib/rename'
 import { joinTreePath, validateNewEntryName } from '../lib/tree-paths'
@@ -30,6 +36,9 @@ type Workspace = {
   /** Display label — last path segment for local, hostname for remote. */
   rootName: string
   tree: FileNode[]
+  /** Active cloud workspace (remote mode only). undefined in local mode
+   *  or when the server predates the workspace registry. */
+  cloudWorkspace?: CloudWorkspace
 }
 
 export type OpenChoiceRequest = {
@@ -62,6 +71,7 @@ type Action =
       rootPath: string
       rootName: string
       tree: FileNode[]
+      cloudWorkspace?: CloudWorkspace
     }
   | { type: 'CLOSE_WORKSPACE' }
   | { type: 'OPEN_FILE'; path: string; content: string; viewMode: ViewMode }
@@ -100,7 +110,8 @@ export function reducer(s: State, a: Action): State {
           kind: a.kind,
           rootPath: a.rootPath,
           rootName: a.rootName,
-          tree: a.tree
+          tree: a.tree,
+          cloudWorkspace: a.cloudWorkspace
         },
         currentFile: null,
         sidebarCollapsed: false
@@ -231,9 +242,11 @@ type Ctx = {
   openFolder: () => Promise<void>
   openFile: () => Promise<void>
   openFolderAt: (path: string) => Promise<void>
-  /** Open a remote workspace. Caller must have already configured
-   *  ipc.vault to a RemoteVault via switchToRemote(). */
+  /** Open a remote workspace. Resolves the cloud workspace (stored
+   *  choice / default) and scopes the vault to it before listing. */
   openRemoteAt: (serverUrl: string) => Promise<void>
+  /** Switch the active cloud workspace while in remote mode. */
+  switchRemoteWorkspace: (ws: CloudWorkspace) => Promise<void>
   /** Switch the active vault back to local and restore the workspace /
    *  file the user had open before they entered remote mode. */
   exitRemote: () => Promise<void>
@@ -336,6 +349,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (stateRef.current.workspace?.kind !== 'remote') {
       localSnapshotRef.current = captureSnapshot(stateRef.current)
     }
+    // Resolve the cloud workspace BEFORE listing so the tree is scoped
+    // from the first paint (last choice per server, else the default
+    // `quill`). A failure here (old server without the registry) falls
+    // back to the whole-vault view instead of blocking entry.
+    let cloud: CloudWorkspace | null = null
+    try {
+      const list = await fetchCloudWorkspaces()
+      cloud = pickCloudWorkspace(list, readStoredCloudWorkspaceId(serverUrl))
+    } catch {
+      /* fall back to unscoped view */
+    }
+    switchToRemote(
+      { url: serverUrl, getToken: () => ipc.remote.getToken() },
+      cloud?.remotePath
+    )
     const tree = await ipc.vault.list('')
     let rootName = serverUrl
     try {
@@ -348,7 +376,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       kind: 'remote',
       rootPath: serverUrl,
       rootName,
-      tree
+      tree,
+      cloudWorkspace: cloud ?? undefined
+    })
+  }, [])
+
+  /** Switch the active cloud workspace while staying in remote mode —
+   *  swaps the vault's rootPath and reloads the tree. */
+  const switchRemoteWorkspace = useCallback(async (ws: CloudWorkspace) => {
+    const cur = stateRef.current.workspace
+    if (cur?.kind !== 'remote') return
+    const serverUrl = cur.rootPath
+    switchToRemote(
+      { url: serverUrl, getToken: () => ipc.remote.getToken() },
+      ws.remotePath
+    )
+    const tree = await ipc.vault.list('')
+    storeCloudWorkspaceId(serverUrl, ws.id)
+    dispatch({
+      type: 'OPEN_WORKSPACE',
+      kind: 'remote',
+      rootPath: serverUrl,
+      rootName: cur.rootName,
+      tree,
+      cloudWorkspace: ws
     })
   }, [])
 
@@ -701,6 +752,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openFile,
       openFolderAt,
       openRemoteAt,
+      switchRemoteWorkspace,
       exitRemote,
       openFileAt,
       openPathWithPrompt,
@@ -727,6 +779,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openFile,
       openFolderAt,
       openRemoteAt,
+      switchRemoteWorkspace,
       exitRemote,
       openFileAt,
       openPathWithPrompt,
