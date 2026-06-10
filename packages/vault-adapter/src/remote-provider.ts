@@ -67,6 +67,13 @@ export type RemoteVaultOptions = {
    * to keep working; it's strictly additive.
    */
   onUnauthorized?: () => void
+  /**
+   * Cloud workspace directory under the vault root (e.g. "quill").
+   * When set, every path this provider sends is prefixed with it and
+   * every listed path comes back workspace-relative — callers operate
+   * inside the workspace without knowing the vault layout.
+   */
+  rootPath?: string
 }
 
 /**
@@ -88,6 +95,7 @@ export class RemoteVault implements VaultProvider {
   private readonly baseUrl: string
   private readonly getAuthHeaders: NonNullable<RemoteVaultOptions['getAuthHeaders']>
   private readonly onUnauthorized: () => void
+  private readonly rootPath: string
 
   constructor(options: RemoteVaultOptions | string = {}) {
     // Tolerate the older positional-baseUrl signature so existing web
@@ -97,10 +105,25 @@ export class RemoteVault implements VaultProvider {
     this.baseUrl = opts.baseUrl ?? ''
     this.getAuthHeaders = opts.getAuthHeaders ?? (() => ({}))
     this.onUnauthorized = opts.onUnauthorized ?? (() => undefined)
+    this.rootPath = (opts.rootPath ?? '').replace(/^\/+|\/+$/g, '')
   }
 
   private url(path: string): string {
     return `${this.baseUrl}${path}`
+  }
+
+  /** Workspace-relative → vault-relative. */
+  private full(path: string): string {
+    const clean = path.replace(/^\/+/, '')
+    if (!this.rootPath) return clean
+    return clean ? `${this.rootPath}/${clean}` : this.rootPath
+  }
+
+  /** Vault-relative → workspace-relative (for listed entries). */
+  private strip(path: string): string {
+    if (!this.rootPath) return path
+    const prefix = `${this.rootPath}/`
+    return path.startsWith(prefix) ? path.slice(prefix.length) : path
   }
 
   /** Merge caller-supplied init with the auth headers + credentials.
@@ -138,7 +161,7 @@ export class RemoteVault implements VaultProvider {
 
   async read(path: string): Promise<string> {
     const res = await fetch(
-      this.url(`/api/vault/file/${encodeURI(path)}`),
+      this.url(`/api/vault/file/${encodeURI(this.full(path))}`),
       await this.withAuth()
     )
     if (res.status === 401) {
@@ -151,7 +174,7 @@ export class RemoteVault implements VaultProvider {
   }
 
   async write(path: string, content: string): Promise<void> {
-    await this.call(`/api/vault/file/${encodeURI(path)}`, {
+    await this.call(`/api/vault/file/${encodeURI(this.full(path))}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'text/plain' },
       body: content
@@ -162,15 +185,15 @@ export class RemoteVault implements VaultProvider {
     await this.call('/api/vault/move', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: oldPath, to: newPath })
+      body: JSON.stringify({ from: this.full(oldPath), to: this.full(newPath) })
     })
   }
 
   async list(path: string): Promise<FileNode[]> {
-    const dir = path.replace(/^\/+/, '')
+    const dir = this.full(path)
     const url = `/api/vault/list${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`
     const entries = await this.call<ServerEntry[]>(url)
-    return entries.map(toFileNode)
+    return entries.map((e) => toFileNode({ ...e, path: this.strip(e.path) }))
   }
 
   async stat(path: string): Promise<FileStat> {
@@ -194,17 +217,17 @@ export class RemoteVault implements VaultProvider {
     await this.call('/api/vault/mkdir', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: path.replace(/^\/+/, '') })
+      body: JSON.stringify({ path: this.full(path) })
     })
   }
 
   async delete(path: string): Promise<void> {
-    await this.call(`/api/vault/file/${encodeURI(path)}`, { method: 'DELETE' })
+    await this.call(`/api/vault/file/${encodeURI(this.full(path))}`, { method: 'DELETE' })
   }
 
   async deleteDir(path: string, recursive: boolean): Promise<void> {
     await this.call(
-      `/api/vault/dir/${encodeURI(path)}${recursive ? '?recursive=1' : ''}`,
+      `/api/vault/dir/${encodeURI(this.full(path))}${recursive ? '?recursive=1' : ''}`,
       { method: 'DELETE' }
     )
   }
