@@ -21,6 +21,11 @@ export type {
   PlanStep,
   RouteDecision,
   Scope,
+  SyncBinding,
+  SyncEntry,
+  SyncSnapshot,
+  SyncSpace,
+  SyncStatus,
   ToolCallPart,
   ToolResultOutput,
   ToolResultPart

@@ -120,6 +120,21 @@ export const ipc = {
     getDefault: () => window.quill.providers.getDefault(),
     setDefault: (id: string | null) => window.quill.providers.setDefault(id)
   },
+  sync: {
+    status: (root: string) => window.quill.sync.status(root),
+    enable: (args: { root: string; name: string; remotePath: string }) =>
+      window.quill.sync.enable(args),
+    bind: (args: { root: string; space: import('@quill/shared-types').SyncSpace }) =>
+      window.quill.sync.bind(args),
+    push: (root: string) => window.quill.sync.push(root),
+    pull: (root: string) => window.quill.sync.pull(root),
+    resolve: (args: { root: string; path: string; keep: 'local' | 'remote' }) =>
+      window.quill.sync.resolve(args),
+    disable: (args: { root: string; removeSpace: boolean }) =>
+      window.quill.sync.disable(args),
+    spaces: () => window.quill.sync.spaces(),
+    removeSpace: (id: string) => window.quill.sync.removeSpace(id)
+  },
   remote: {
     getUrl: (): Promise<string | null> => window.quill.remote.getUrl(),
     setUrl: (url: string | null): Promise<void> => window.quill.remote.setUrl(url),

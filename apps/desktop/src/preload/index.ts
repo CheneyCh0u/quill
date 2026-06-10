@@ -8,7 +8,9 @@ import type {
   FileStat,
   MenuCommand,
   PlanApprovalResponse,
-  Scope
+  Scope,
+  SyncSnapshot,
+  SyncSpace
 } from '@quill/shared-types'
 
 // Re-export the shared types so existing consumers (`import type { ... }
@@ -131,6 +133,24 @@ const api = {
       content: string
     }): Promise<string | null> => ipcRenderer.invoke('themes:exportDialog', args),
     revealFolder: (): Promise<string> => ipcRenderer.invoke('themes:revealFolder')
+  },
+  sync: {
+    status: (root: string): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:status', root),
+    enable: (args: { root: string; name: string; remotePath: string }): Promise<SyncSnapshot> =>
+      ipcRenderer.invoke('sync:enable', args),
+    bind: (args: { root: string; space: SyncSpace }): Promise<SyncSnapshot> =>
+      ipcRenderer.invoke('sync:bind', args),
+    push: (root: string): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:push', root),
+    pull: (root: string): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:pull', root),
+    resolve: (args: {
+      root: string
+      path: string
+      keep: 'local' | 'remote'
+    }): Promise<SyncSnapshot> => ipcRenderer.invoke('sync:resolve', args),
+    disable: (args: { root: string; removeSpace: boolean }): Promise<void> =>
+      ipcRenderer.invoke('sync:disable', args),
+    spaces: (): Promise<SyncSpace[]> => ipcRenderer.invoke('sync:spaces'),
+    removeSpace: (id: string): Promise<void> => ipcRenderer.invoke('sync:removeSpace', id)
   },
   remote: {
     getUrl: (): Promise<string | null> => ipcRenderer.invoke('remote:getUrl'),

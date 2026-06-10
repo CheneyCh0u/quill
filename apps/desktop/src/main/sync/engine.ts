@@ -157,6 +157,12 @@ export async function listSpaces(cfg: RemoteConfig): Promise<SyncSpace[]> {
   return api(cfg).listSpaces()
 }
 
+/** Drop a registry entry without touching any files — the Settings
+ *  window manages the list without having a workspace root in hand. */
+export async function removeSpace(cfg: RemoteConfig, id: string): Promise<void> {
+  await api(cfg).deleteSpace(id)
+}
+
 /** Register a new space on the server and bind this folder to it.
  *  Does NOT push — callers chain pushAll for the「开启并首次推送」flow. */
 export async function enableSync(
