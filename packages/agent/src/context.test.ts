@@ -149,3 +149,100 @@ describe('context store', () => {
     expect(result?.items[0]).toEqual({ kind: 'user', text: 'm0' })
   })
 })
+
+describe('session store', () => {
+  const scope: Scope = { kind: 'workspace', root: '/r' }
+
+  test('sessions() bootstraps one empty active session', async () => {
+    const store = createContextStore(dir)
+    const index = await store.sessions(scope)
+    expect(index.sessions).toHaveLength(1)
+    expect(index.activeId).toBe(index.sessions[0].id)
+    expect(index.sessions[0].turnCount).toBe(0)
+  })
+
+  test('saveSession persists items + meta; loadSession roundtrips', async () => {
+    const store = createContextStore(dir)
+    const { activeId } = await store.sessions(scope)
+    await store.saveSession(scope, activeId, [{ kind: 'user', text: 'hi' }], {
+      title: '帮我整理笔记',
+      turnCount: 1
+    })
+    const loaded = await store.loadSession(scope, activeId)
+    expect(loaded?.items).toEqual([{ kind: 'user', text: 'hi' }])
+    const index = await store.sessions(scope)
+    expect(index.sessions[0]).toMatchObject({ title: '帮我整理笔记', turnCount: 1 })
+  })
+
+  test('createSession adds an empty session, makes it active, sorts recent-first', async () => {
+    const store = createContextStore(dir)
+    const first = await store.sessions(scope)
+    await store.saveSession(scope, first.activeId, [{ k: 1 }], { title: 'a', turnCount: 1 })
+    const after = await store.createSession(scope)
+    expect(after.sessions).toHaveLength(2)
+    expect(after.activeId).not.toBe(first.activeId)
+    expect(after.sessions[0].id).toBe(after.activeId) // newest first
+    expect(await store.loadSession(scope, after.activeId)).toBeNull()
+  })
+
+  test('setActiveSession switches; isolation between sessions holds', async () => {
+    const store = createContextStore(dir)
+    const first = await store.sessions(scope)
+    await store.saveSession(scope, first.activeId, [{ s: 1 }], { title: 's1', turnCount: 1 })
+    const after = await store.createSession(scope)
+    await store.saveSession(scope, after.activeId, [{ s: 2 }], { title: 's2', turnCount: 1 })
+
+    await store.setActiveSession(scope, first.activeId)
+    const index = await store.sessions(scope)
+    expect(index.activeId).toBe(first.activeId)
+    expect((await store.loadSession(scope, first.activeId))?.items).toEqual([{ s: 1 }])
+    expect((await store.loadSession(scope, after.activeId))?.items).toEqual([{ s: 2 }])
+  })
+
+  test('deleteSession removes data; deleting active switches to most recent', async () => {
+    const store = createContextStore(dir)
+    const first = await store.sessions(scope)
+    await store.saveSession(scope, first.activeId, [{ s: 1 }], { title: 's1', turnCount: 1 })
+    const second = await store.createSession(scope)
+    await store.saveSession(scope, second.activeId, [{ s: 2 }], { title: 's2', turnCount: 1 })
+
+    const after = await store.deleteSession(scope, second.activeId)
+    expect(after.sessions).toHaveLength(1)
+    expect(after.activeId).toBe(first.activeId)
+    expect(await store.loadSession(scope, second.activeId)).toBeNull()
+  })
+
+  test('deleting the last session bootstraps a fresh empty one', async () => {
+    const store = createContextStore(dir)
+    const { activeId } = await store.sessions(scope)
+    await store.saveSession(scope, activeId, [{ s: 1 }], { title: 's1', turnCount: 1 })
+    const after = await store.deleteSession(scope, activeId)
+    expect(after.sessions).toHaveLength(1)
+    expect(after.activeId).not.toBe(activeId)
+    expect(after.sessions[0].turnCount).toBe(0)
+  })
+
+  test('legacy single-file conversation migrates into the first session', async () => {
+    const store = createContextStore(dir)
+    await store.save(scope, [{ kind: 'user', text: 'old talk' }]) // legacy writer
+    const index = await store.sessions(scope)
+    expect(index.sessions).toHaveLength(1)
+    const loaded = await store.loadSession(scope, index.activeId)
+    expect(loaded?.items).toEqual([{ kind: 'user', text: 'old talk' }])
+    // Legacy flat file is gone — no double-migration on next call.
+    const again = await store.sessions(scope)
+    expect(again.sessions).toHaveLength(1)
+    expect(again.activeId).toBe(index.activeId)
+  })
+
+  test('untitled scope gets an ephemeral session and never touches disk', async () => {
+    const store = createContextStore(dir)
+    const index = await store.sessions({ kind: 'untitled' })
+    expect(index.sessions).toHaveLength(1)
+    await store.saveSession({ kind: 'untitled' }, index.activeId, [{ x: 1 }], {
+      title: 'x',
+      turnCount: 1
+    })
+    expect(await fs.readdir(dir).catch(() => [])).toEqual([])
+  })
+})
