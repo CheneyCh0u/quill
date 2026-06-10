@@ -400,13 +400,47 @@ export function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('context:load', async (_evt, scope: Scope) => contextStore.load(scope))
-  ipcMain.handle(
-    'context:save',
-    async (_evt, args: { scope: Scope; items: unknown[] }) =>
-      contextStore.save(args.scope, args.items)
+  // Conversation sessions — one scope holds many isolated sessions. The
+  // store guarantees a non-empty index, so the renderer can always assume
+  // an active session exists.
+  ipcMain.handle('context:sessions', async (_evt, scope: Scope) =>
+    contextStore.sessions(scope)
   )
-  ipcMain.handle('context:clear', async (_evt, scope: Scope) => contextStore.clear(scope))
+  ipcMain.handle(
+    'context:loadSession',
+    async (_evt, args: { scope: Scope; sessionId: string }) =>
+      contextStore.loadSession(args.scope, args.sessionId)
+  )
+  ipcMain.handle(
+    'context:saveSession',
+    async (
+      _evt,
+      args: {
+        scope: Scope
+        sessionId: string
+        items: unknown[]
+        title: string
+        turnCount: number
+      }
+    ) =>
+      contextStore.saveSession(args.scope, args.sessionId, args.items, {
+        title: args.title,
+        turnCount: args.turnCount
+      })
+  )
+  ipcMain.handle('context:createSession', async (_evt, scope: Scope) =>
+    contextStore.createSession(scope)
+  )
+  ipcMain.handle(
+    'context:setActiveSession',
+    async (_evt, args: { scope: Scope; sessionId: string }) =>
+      contextStore.setActiveSession(args.scope, args.sessionId)
+  )
+  ipcMain.handle(
+    'context:deleteSession',
+    async (_evt, args: { scope: Scope; sessionId: string }) =>
+      contextStore.deleteSession(args.scope, args.sessionId)
+  )
 
   // -------- Themes ----------------------------------------------------
   // Custom themes live as JSON files under ~/.quill/themes/. main scans

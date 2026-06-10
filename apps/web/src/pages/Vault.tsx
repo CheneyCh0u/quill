@@ -100,6 +100,9 @@ export function Vault(): JSX.Element {
   }, [selected, vault, source])
 
   const agent = useAgentSession({
+    // Sessions live per cloud workspace — switching workspaces loads
+    // that workspace's active session (the old behavior was a hard reset).
+    workspaceId: workspace?.id,
     onActivityComplete: () => {
       fileTreeRef.current?.refresh().catch(() => undefined)
       void reloadCurrentFileFromDisk()
@@ -127,10 +130,9 @@ export function Vault(): JSX.Element {
       setSource('')
       setBuffer('')
       setLoadErr(null)
-      agent.reset()
       return true
     },
-    [dirty, dialogs, agent]
+    [dirty, dialogs]
   )
 
   const handleCreateWorkspace = useCallback(async (): Promise<void> => {

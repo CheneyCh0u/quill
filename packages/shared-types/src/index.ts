@@ -178,6 +178,23 @@ export type CompressionRunArgs = {
 // the client can dispatch events to the right local handler.
 // ============================================================
 
+// Agent conversation sessions — one scope holds many isolated sessions.
+// Persisted by the desktop context store / web localStorage; metas cross
+// IPC so they live here.
+export type SessionMeta = {
+  id: string
+  /** First user prompt, truncated by the UI. Empty = untouched session. */
+  title: string
+  updatedAt: number
+  turnCount: number
+}
+
+export type SessionIndex = {
+  version: 1
+  activeId: string
+  sessions: SessionMeta[]
+}
+
 export type ClientAgentMessage =
   | {
       type: 'run'

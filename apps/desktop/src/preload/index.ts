@@ -9,6 +9,7 @@ import type {
   MenuCommand,
   PlanApprovalResponse,
   Scope,
+  SessionIndex,
   SyncSnapshot,
   Workspace
 } from '@quill/shared-types'
@@ -89,13 +90,26 @@ const api = {
     }
   },
   context: {
-    load: (
+    sessions: (scope: Scope): Promise<SessionIndex> =>
+      ipcRenderer.invoke('context:sessions', scope),
+    loadSession: (args: {
       scope: Scope
-    ): Promise<{ version: 1; scope: Scope; items: unknown[]; updatedAt: number } | null> =>
-      ipcRenderer.invoke('context:load', scope),
-    save: (args: { scope: Scope; items: unknown[] }): Promise<void> =>
-      ipcRenderer.invoke('context:save', args),
-    clear: (scope: Scope): Promise<void> => ipcRenderer.invoke('context:clear', scope)
+      sessionId: string
+    }): Promise<{ version: 1; scope: Scope; items: unknown[]; updatedAt: number } | null> =>
+      ipcRenderer.invoke('context:loadSession', args),
+    saveSession: (args: {
+      scope: Scope
+      sessionId: string
+      items: unknown[]
+      title: string
+      turnCount: number
+    }): Promise<void> => ipcRenderer.invoke('context:saveSession', args),
+    createSession: (scope: Scope): Promise<SessionIndex> =>
+      ipcRenderer.invoke('context:createSession', scope),
+    setActiveSession: (args: { scope: Scope; sessionId: string }): Promise<void> =>
+      ipcRenderer.invoke('context:setActiveSession', args),
+    deleteSession: (args: { scope: Scope; sessionId: string }): Promise<SessionIndex> =>
+      ipcRenderer.invoke('context:deleteSession', args)
   },
   providers: {
     list: (): Promise<Array<{ id: string; model: string; addedAt: number; updatedAt: number }>> =>

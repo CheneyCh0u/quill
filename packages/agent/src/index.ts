@@ -26,6 +26,7 @@ export { migrateModelId, listSupportedProviders } from './providers'
 export type { ProviderKind, ProviderProfile } from './providers'
 export { buildSystemPrompt } from './prompt'
 export { createContextStore } from './context'
+export type { SessionIndex, SessionMeta } from './context'
 
 export interface AgentRuntimeDeps {
   credentials: CredentialProvider

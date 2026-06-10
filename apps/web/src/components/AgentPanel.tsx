@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ApprovalPayload, Scope } from '@quill/shared-types'
+import type { ApprovalPayload, Scope, SessionIndex } from '@quill/shared-types'
 import { renderMarkdown } from '../lib/markdown'
 import type { AgentSession, AgentTurn, SelectedModel } from '../lib/use-agent-session'
 import type { AgentConnectionStatus } from '../lib/agent-client'
@@ -44,7 +44,10 @@ export function AgentPanel({
     send,
     cancel,
     respond,
-    reset
+    sessions,
+    switchSession,
+    newSession,
+    deleteSession
   } = session
   const bottomRef = useRef<HTMLDivElement>(null)
   const runningTurn = turns.find((t) => t.status === 'running')
@@ -112,7 +115,15 @@ export function AgentPanel({
           )}
         </>
       }
-      onReset={turns.length > 0 ? reset : undefined}
+      sessionsMenu={
+        <SessionMenu
+          sessions={sessions}
+          disabled={!!runningTurn}
+          onSwitch={switchSession}
+          onCreate={newSession}
+          onDelete={deleteSession}
+        />
+      }
     >
       {compressionStatus !== 'idle' && (
         <CompressionBanner status={compressionStatus} />
@@ -237,7 +248,7 @@ function PanelShell({
   header,
   status,
   onClose,
-  onReset,
+  sessionsMenu,
   children
 }: {
   /** Custom header content (model picker + token budget). Falls back to
@@ -245,9 +256,8 @@ function PanelShell({
   header?: React.ReactNode
   status: AgentConnectionStatus
   onClose: () => void
-  /** When present, show a 清空 button — lets the user drop a stale
-   *  conversation without closing the whole panel. */
-  onReset?: () => void
+  /** Session switcher (替代旧「清空」— 新建会话覆盖其语义且对话可找回). */
+  sessionsMenu?: React.ReactNode
   children: React.ReactNode
 }): JSX.Element {
   return (
@@ -257,16 +267,7 @@ function PanelShell({
         <div className="flex-1 flex items-center gap-2 min-w-0">
           {header ?? <span className="text-sm text-[var(--ink-soft)]">AI</span>}
         </div>
-        {onReset && (
-          <button
-            type="button"
-            onClick={onReset}
-            className="text-xs text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded px-2 py-1"
-            title="清空当前对话"
-          >
-            清空
-          </button>
-        )}
+        {sessionsMenu}
         <button
           type="button"
           onClick={onClose}
@@ -618,5 +619,188 @@ function GenericBody({ payload }: { payload: ApprovalPayload }): JSX.Element {
     <pre className="px-3 py-2 font-mono text-[11px] text-[var(--ink-soft)] whitespace-pre-wrap break-all max-h-[240px] overflow-y-auto">
       {JSON.stringify(payload, null, 2)}
     </pre>
+  )
+}
+
+/**
+ * Header session switcher (会话 button + dropdown). Touch targets stay
+ * ≥44px and the dropdown caps to the viewport so the same control works
+ * in the H5 full-screen sheet.
+ */
+function SessionMenu({
+  sessions,
+  disabled,
+  onSwitch,
+  onCreate,
+  onDelete
+}: {
+  sessions: SessionIndex | null
+  disabled: boolean
+  onSwitch: (id: string) => void
+  onCreate: () => void
+  onDelete: (id: string) => void
+}): JSX.Element | null {
+  const [open, setOpen] = useState(false)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent | TouchEvent): void {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('touchstart', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) setConfirmingId(null)
+  }, [open])
+
+  if (!sessions) return null
+
+  function timeLabel(updatedAt: number): string {
+    if (!updatedAt) return ''
+    const d = new Date(updatedAt)
+    return d.toDateString() === new Date().toDateString()
+      ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+  }
+
+  return (
+    <div ref={wrapRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex items-center gap-1 px-2 py-1.5 rounded text-xs transition-colors ${
+          open
+            ? 'bg-[var(--paper-soft)] text-[var(--ink)]'
+            : 'text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]'
+        }`}
+        title="会话"
+      >
+        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+        </svg>
+        会话
+        <svg viewBox="0 0 24 24" className={`w-2.5 h-2.5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-24px)] rounded-lg border border-[var(--rule)] bg-[var(--paper)] shadow-[0_8px_28px_rgba(0,0,0,0.14),0_2px_6px_rgba(0,0,0,0.08)] text-sm z-50">
+          <p className="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] select-none">
+            sessions
+          </p>
+          <div className="px-1.5 pb-1 max-h-[50dvh] overflow-y-auto">
+            {sessions.sessions.map((m) => {
+              const isActive = m.id === sessions.activeId
+              if (confirmingId === m.id) {
+                return (
+                  <div
+                    key={m.id}
+                    className="min-h-[44px] px-2.5 py-2 rounded-md bg-[var(--accent-soft)]/40 flex items-center gap-2"
+                  >
+                    <span className="flex-1 text-[12px] text-[var(--ink-soft)] truncate">
+                      删除「{m.title || '新会话'}」？
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmingId(null)
+                        onDelete(m.id)
+                      }}
+                      className="text-xs text-[var(--accent)] px-2 py-1.5 shrink-0"
+                    >
+                      删除
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingId(null)}
+                      className="text-xs text-[var(--ink-faint)] px-2 py-1.5 shrink-0"
+                    >
+                      取消
+                    </button>
+                  </div>
+                )
+              }
+              return (
+                <div
+                  key={m.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (!isActive && !disabled) onSwitch(m.id)
+                    setOpen(false)
+                  }}
+                  className={`min-h-[44px] px-2.5 py-2 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
+                    isActive ? 'bg-[var(--paper-soft)]' : 'hover:bg-[var(--paper-soft)]'
+                  } ${disabled ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className={`truncate text-[13px] ${isActive ? 'text-[var(--ink)]' : 'text-[var(--ink-soft)]'}`}>
+                      {m.title || '新会话'}
+                    </div>
+                    <div className="text-[11px] text-[var(--ink-faint)]">
+                      {timeLabel(m.updatedAt)}
+                      {m.turnCount > 0 ? ` · ${m.turnCount} 轮` : ' · 空'}
+                    </div>
+                  </div>
+                  {isActive ? (
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (!disabled) setConfirmingId(m.id)
+                      }}
+                      className="p-2 -m-1 rounded text-[var(--ink-ghost)] hover:text-[var(--accent)] shrink-0"
+                      title="删除会话"
+                      aria-label="删除会话"
+                    >
+                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="border-t border-[var(--rule-soft)] px-1.5 py-1">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setOpen(false)
+                onCreate()
+              }}
+              className="w-full min-h-[44px] px-2.5 rounded-md flex items-center gap-2 text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] disabled:opacity-50 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M5 12h14M12 5v14" />
+              </svg>
+              新建会话
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
