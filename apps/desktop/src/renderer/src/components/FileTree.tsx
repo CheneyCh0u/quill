@@ -275,7 +275,7 @@ function FileTreeNode({
     )
   }
 
-  if (node.isText) {
+  if (node.isText || node.isViewable) {
     return (
       <li>
         {isRenamingThis ? (
