@@ -22,6 +22,7 @@ import { ipc } from '../lib/ipc'
 import { render as renderMd } from '../lib/markdown'
 import { itemsToMessages, type ConvItem } from '../lib/itemsToMessages'
 import { sanitizeItems } from '../lib/sanitizeItems'
+import { groupToolItems, summarizeGroup, type ToolGroupEntry } from '../lib/toolGroups'
 import { deriveSessionTitle } from '../lib/sessionTitle'
 import { coerceUsage, sumUsage, formatTokens } from '../lib/usage'
 import { exportConversation } from '../lib/exportConversation'
@@ -609,23 +610,9 @@ export function AgentPanel({ onClose }: Props) {
     })
   }, [items, compressing, provider, buildChoice])
 
-  // Cross-links between tool-call / tool-result transcript items (#125):
-  // resolved ids hide the standalone call row (the result row represents
-  // the whole call), args feed the result row's expanded view.
-  const resolvedToolIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const it of items) {
-      if (it.kind === 'tool-result') ids.add(it.toolCallId)
-    }
-    return ids
-  }, [items])
-  const toolArgsById = useMemo(() => {
-    const map = new Map<string, unknown>()
-    for (const it of items) {
-      if (it.kind === 'tool-call') map.set(it.toolCallId, it.args)
-    }
-    return map
-  }, [items])
+  // 工具行归组（#125/#130）：连续的已完成调用折成一个 tool-group，
+  // 未解析的调用（正在运行）独立透传。纯函数，见 lib/toolGroups。
+  const displayEntries = useMemo(() => groupToolItems(items), [items])
 
   const canRun = !!scope && !!provider && !busy && input.trim().length > 0
   const canCancel = busy && runId !== null
@@ -1040,27 +1027,21 @@ export function AgentPanel({ onClose }: Props) {
               : '没有打开任何文件或文件夹'}
           </div>
         )}
-        {items.map((item, i) => {
-          // 完成的调用由结果行代表（一行折叠、点开含参数+结果），调用行
-          // 只在结果未到时存在 —— 即"正在运行的那条"。见 #125。
-          if (item.kind === 'tool-call' && resolvedToolIds.has(item.toolCallId)) {
-            return null
-          }
-          return (
+        {displayEntries.map((entry) =>
+          entry.kind === 'tool-group' ? (
+            <ToolGroupView key={`g-${entry.entries[0].toolCallId}`} entries={entry.entries} />
+          ) : (
             <ItemView
-              key={i}
-              item={item}
+              key={entry.index}
+              item={entry.item}
               onApproval={handleApproval}
               onPlanStepToggle={handlePlanStepToggle}
               onPlanExecute={handlePlanExecute}
               onPlanDismiss={handlePlanDismiss}
-              toolRunning={item.kind === 'tool-call' && busy}
-              toolArgs={
-                item.kind === 'tool-result' ? toolArgsById.get(item.toolCallId) : undefined
-              }
+              toolRunning={entry.item.kind === 'tool-call' && busy}
             />
           )
-        })}
+        )}
         {busy && (
           <div className="flex items-center gap-2 text-[12px] text-[var(--ink-faint)]">
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -1128,8 +1109,7 @@ function ItemView({
   onPlanStepToggle,
   onPlanExecute,
   onPlanDismiss,
-  toolRunning,
-  toolArgs
+  toolRunning
 }: {
   item: Item
   onApproval: (toolCallId: string, approved: boolean) => Promise<void>
@@ -1138,8 +1118,6 @@ function ItemView({
   onPlanDismiss: () => Promise<void>
   /** tool-call items only: the call hasn't resolved and the run is live. */
   toolRunning?: boolean
-  /** tool-result items only: matching call's args for the expanded view. */
-  toolArgs?: unknown
 }) {
   if (item.kind === 'user') {
     return (
@@ -1188,7 +1166,9 @@ function ItemView({
     return <ToolCallView name={item.name} args={item.args} running={toolRunning} />
   }
   if (item.kind === 'tool-result') {
-    return <ToolResultView name={item.name} result={item.result} args={toolArgs} />
+    // 正常路径下结果行都进了 tool-group（见 groupToolItems）；这里只是
+    // 防御性兜底。
+    return <ToolResultView name={item.name} result={item.result} />
   }
   if (item.kind === 'approval') {
     return <ApprovalCardView item={item} onApproval={onApproval} />
@@ -1623,6 +1603,45 @@ function ToolCallView({
         <pre className="font-mono text-[11px] text-[var(--ink-faint)] mt-0.5 overflow-x-auto whitespace-pre-wrap break-all">
           {JSON.stringify(args, null, 2)}
         </pre>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 连续完成调用的折叠组（#130）：≥2 条时收成一行组头（`› N 个工具调用 ·
+ * 名称摘要`），展开后是逐条可再展开的结果行；单条不加组头直接平铺。
+ */
+function ToolGroupView({ entries }: { entries: ToolGroupEntry[] }) {
+  const [open, setOpen] = useState(false)
+  if (entries.length === 1) {
+    const e = entries[0]
+    return <ToolResultView name={e.name} result={e.result} args={e.args} />
+  }
+  return (
+    <div className="text-[12px] border-l-2 border-[var(--accent)]/40 pl-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="no-drag flex items-center gap-1 text-[var(--ink-soft)] hover:text-[var(--ink)] transition w-full text-left"
+      >
+        {open ? (
+          <ChevronDown className="w-3 h-3 shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 shrink-0" />
+        )}
+        <span className="font-serif-zh italic">{entries.length} 个工具调用</span>
+        {!open && (
+          <span className="font-mono text-[11px] text-[var(--ink-faint)] truncate ml-1 min-w-0">
+            {summarizeGroup(entries)}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="mt-1 space-y-1">
+          {entries.map((e) => (
+            <ToolResultView key={e.toolCallId} name={e.name} result={e.result} args={e.args} />
+          ))}
+        </div>
       )}
     </div>
   )
