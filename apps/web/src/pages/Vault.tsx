@@ -274,6 +274,7 @@ export function Vault(): JSX.Element {
           >
             <X className="w-4 h-4" />
           </button>
+          <img src="/favicon.svg" alt="Quill" className="w-6 h-6 shrink-0 select-none" draggable={false} />
           {workspace ? (
             <WorkspaceSwitcher
               workspaces={workspaces}
@@ -333,6 +334,12 @@ export function Vault(): JSX.Element {
           >
             <Menu className="w-4 h-4" />
           </button>
+          <img
+            src="/favicon.svg"
+            alt="Quill"
+            className="md:hidden w-5 h-5 shrink-0 select-none -ml-1"
+            draggable={false}
+          />
           <span className="text-sm text-[var(--ink-soft)] truncate flex items-center gap-1.5 flex-1 min-w-0">
             <span className="truncate">{selected?.path ?? '选择一个文件'}</span>
             {dirty && (
