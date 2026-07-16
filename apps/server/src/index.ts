@@ -12,6 +12,7 @@ import {
 } from './workspaces'
 import { createAgentRoutes } from './agent'
 import { ProvidersStore } from './providers-store'
+import { ServerCodexStore } from './codex-store'
 import { requireSession } from './auth'
 
 const CONFIG_PATH = process.env.QUILL_CONFIG ?? './config.yaml'
@@ -89,6 +90,8 @@ const agentRoutes = createAgentRoutes({
   store: providersStore,
   sessionSecret: config.auth.session_secret,
   vaultRoot: config.vault.path,
+  // ChatGPT subscription tokens — chmod 0600 JSON beside providers.json.
+  codexStore: new ServerCodexStore(join(STATE_DIR, 'codex-auth.json')),
   resolveWorkspaceRoot: (id) =>
     resolveWorkspaceRoot(workspacesFile, config.vault.path, id)
 })
