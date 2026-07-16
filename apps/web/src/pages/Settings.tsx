@@ -8,6 +8,8 @@ import {
   type ConfiguredProvider
 } from '../lib/providers-api'
 import { UnauthorizedError } from '@quill/vault-adapter'
+import { LogOut } from 'lucide-react'
+import { logout } from '../lib/auth'
 
 const PROVIDER_LABELS: Record<string, string> = {
   kimi: 'Kimi · Coding Plan',
@@ -133,6 +135,26 @@ export function Settings(): JSX.Element {
             ，对应主机上的 <code className="font-mono not-italic">./state/providers.json</code>。
             重启容器 / 重 build 镜像都不会丢。
           </p>
+
+          <h2
+            className="font-display text-2xl text-[var(--ink)] mt-10 mb-1"
+            style={{ fontWeight: 500 }}
+          >
+            账户
+          </h2>
+          <p className="font-serif-zh italic text-sm text-[var(--ink-faint)] mb-4">
+            Account · 当前设备的登录会话
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              void logout().then(() => navigate('/login', { replace: true }))
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm text-[var(--ink-soft)] border border-[var(--rule)] hover:text-[var(--accent)] hover:border-[var(--accent)]/40 transition"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            退出登录
+          </button>
         </div>
       </main>
 

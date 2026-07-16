@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { X } from 'lucide-react'
 import { buildOutline, type OutlineNode } from '../lib/outline'
 
 type Props = {
@@ -98,10 +99,10 @@ export function OutlineSheetButton({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-[var(--ink-faint)] text-sm px-2"
+                className="text-[var(--ink-faint)] px-2"
                 aria-label="关闭"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
             <nav className="space-y-0.5">

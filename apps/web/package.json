@@ -22,6 +22,7 @@
     "@quill/shared-types": "workspace:*",
     "@quill/vault-adapter": "workspace:*",
     "highlight.js": "^11.11.1",
+    "lucide-react": "^1.24.0",
     "markdown-it": "^14.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

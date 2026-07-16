@@ -1,3 +1,5 @@
+import { Eye, Pencil } from 'lucide-react'
+
 export type ViewMode = 'edit' | 'preview'
 
 type Props = {
@@ -5,9 +7,9 @@ type Props = {
   onChange: (m: ViewMode) => void
 }
 
-const modes: { id: ViewMode; label: string }[] = [
-  { id: 'edit', label: '✎' },
-  { id: 'preview', label: '👁' }
+const modes: { id: ViewMode; label: JSX.Element }[] = [
+  { id: 'edit', label: <Pencil className="w-3.5 h-3.5" /> },
+  { id: 'preview', label: <Eye className="w-3.5 h-3.5" /> }
 ]
 
 export function ModeSwitcher({ value, onChange }: Props): JSX.Element {
