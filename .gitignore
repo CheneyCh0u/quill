@@ -29,3 +29,9 @@ Thumbs.db
 # Server local config (never commit secrets)
 apps/server/config.yaml
 apps/web/dist
+
+# Docker-compose deploy layout (password hash / session secret / oauth
+# tokens / user notes — none of it belongs in git)
+/config.yaml
+/state/
+/vault/
