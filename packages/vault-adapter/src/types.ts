@@ -31,6 +31,8 @@ export interface VaultProvider {
 
   // Basic CRUD
   read(path: string): Promise<string>
+  /** Raw bytes for view-only formats (images / pdf, #132). */
+  readBinary(path: string): Promise<Uint8Array>
   write(path: string, content: string): Promise<void>
   rename(oldPath: string, newPath: string): Promise<void>
   list(path: string): Promise<FileNode[]>

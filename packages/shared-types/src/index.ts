@@ -12,9 +12,10 @@
 export {
   getFileType,
   isSupportedTextFile,
+  isViewableFile,
   allTextExtensions
 } from './fileTypes'
-export type { FileLanguage, FileTypeInfo } from './fileTypes'
+export type { FileLanguage, FileTypeInfo, ViewableKind } from './fileTypes'
 
 export {
   BUILTIN_THEME_IDS,
@@ -45,6 +46,9 @@ export type FileNode = {
    *  files, and plain-text formats). Renderer uses this to decide whether
    *  the entry is clickable in the file tree. */
   isText: boolean
+  /** True for view-only formats (images / pdf) — openable in a read-only
+   *  viewer, never in the editor. */
+  isViewable?: boolean
   children?: FileNode[]
 }
 

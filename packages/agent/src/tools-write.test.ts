@@ -216,3 +216,16 @@ describe('single-file scope', () => {
     expect(calls.length).toBe(0)
   })
 })
+
+describe('read_file on viewable binaries', () => {
+  test('refuses images/pdf instead of returning mojibake', async () => {
+    const tools = makeTools({ kind: 'workspace', root: dir }, approveAll)
+    await writeFile(join(dir, 'pic.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    const r = (await exec(tools, 'read_file', { path: 'pic.png' })) as {
+      ok: boolean
+      error?: string
+    }
+    expect(r.ok).toBe(false)
+    expect(r.error).toMatch(/binary|图片|viewable|not.*text/i)
+  })
+})
