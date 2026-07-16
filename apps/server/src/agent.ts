@@ -63,7 +63,9 @@ export function createAgentRoutes(
   app.get('/catalog', requireSession(deps.sessionSecret), (c) => {
     return c.json(
       listSupportedProviders()
-        .filter((p) => p.models.length > 0)
+        // oauth 类 provider（ChatGPT 订阅）目前只有桌面端能登录，
+        // server 无处存订阅 token — 不进 web catalog。
+        .filter((p) => p.models.length > 0 && p.kind !== 'openai-codex')
         .map((p) => ({
           id: p.id,
           kind: p.kind,
@@ -100,6 +102,9 @@ export function createAgentRoutes(
     if (!parsed.success) return c.json({ error: 'invalid body' }, 400)
     const supported = listSupportedProviders().find((p) => p.id === parsed.data.id)
     if (!supported) return c.json({ error: `unknown provider: ${parsed.data.id}` }, 400)
+    if (supported.kind === 'openai-codex') {
+      return c.json({ error: `${parsed.data.id} 使用订阅登录，仅桌面端支持` }, 400)
+    }
     if (
       supported.models.length > 0 &&
       !supported.models.some((m) => m.id === parsed.data.model)
