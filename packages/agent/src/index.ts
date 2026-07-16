@@ -1,9 +1,8 @@
-import { streamText, stepCountIs, type ModelMessage } from 'ai'
+import { Command } from '@langchain/langgraph'
+import type { LanguageModel, ModelMessage } from 'ai'
 import type {
   AgentEvent,
-  AgentMode,
   AgentRunArgs,
-  ApprovalPayload,
   ApprovalResponse,
   CompressionRunArgs,
   Plan,
@@ -17,7 +16,14 @@ import { classifyIntent } from './router'
 import { streamPlan } from './plan'
 import { createPlanApprovalsManager } from './plan-approvals'
 import { compressConversation } from './compress'
-import { consumeBuildStream } from './build-stream'
+import { runBuildStep } from './step'
+import {
+  createAgentGraph,
+  createApprovalGate,
+  AGENT_RECURSION_LIMIT,
+  type ApprovalRequest,
+  type GraphDeps
+} from './graph'
 import { createTerminalEventGuard } from './terminal-event-guard'
 import type { CredentialProvider } from './credentials'
 
@@ -45,6 +51,15 @@ export type { SessionIndex, SessionMeta } from './context'
 
 export interface AgentRuntimeDeps {
   credentials: CredentialProvider
+}
+
+function abortMarker(): Error {
+  if (typeof DOMException === 'function') {
+    return new DOMException('Aborted', 'AbortError')
+  }
+  const e = new Error('Aborted')
+  e.name = 'AbortError'
+  return e
 }
 
 /**
@@ -92,90 +107,153 @@ export class AgentRuntime {
   }
 
   /**
-   * Top-level entry. Orchestrates Router → Plan → Build based on `args.mode`:
-   * - 'build': skip routing, run Build directly (Phase 2/3 behavior).
-   * - 'plan':  force Plan-then-Build.
-   * - 'auto' (default): call Router; if it picks 'plan', run Plan-then-Build,
-   *   otherwise run Build directly.
+   * Top-level entry. The Router → Plan → Build flow is a LangGraph
+   * StateGraph (see graph.ts); this method builds the per-run graph with
+   * its LLM seams, then drives the invoke/interrupt loop:
    *
-   * Cancellation: one AbortController feeds Router + Plan + Build, so a single
-   * cancel() short-circuits any phase. Approvals queue is reset on top.
+   *   invoke → __interrupt__? → translate to legacy approval events →
+   *   await host response → invoke(Command{resume}) → … → terminal state
+   *
+   * The legacy-event translation (tool-approval-request / plan-approval-
+   * request + respondApproval / respondPlanApproval) is the #123 compat
+   * shim — #124 replaces it with a first-class interrupt/resume protocol.
+   *
+   * Cancellation: one AbortController feeds every node via config.signal;
+   * cancelRun() also flushes pending approval bridges so the loop unwinds.
    */
   async runAgent(
     runId: string,
     args: AgentRunArgs,
     rawOnEvent: (event: AgentEvent) => void
   ): Promise<void> {
-    // Belt-and-braces guard: any path out of the try block — including the
-    // silent `return` after a wedge-recovered abort or a missing plan — must
-    // still hit the renderer with a terminal event so the spinner clears.
-    // See #89.
+    // Belt-and-braces guard: any path out of the try block must still hit
+    // the renderer with a terminal event so the spinner clears. See #89.
     const guard = createTerminalEventGuard(rawOnEvent)
     const onEvent = guard.onEvent
 
     const controller = new AbortController()
     this.runs.set(runId, controller)
-    const mode: AgentMode = args.mode ?? 'auto'
 
     // Resolve per-phase model specs. Router uses the Build model (cheap,
     // single classifier call — and matches what the user picked for the
-    // phase that will actually run). Plan and Build fall back to the
-    // top-level providerId/modelId when no override is set.
+    // phase that will actually run). Plan falls back to the Build instance
+    // when the specs match so we don't build a second model for nothing.
     const buildProviderId = args.buildProviderId ?? args.providerId
     const buildModelId = args.buildModelId ?? args.modelId
     const planProviderId = args.planProviderId ?? args.providerId
     const planModelId = args.planModelId ?? args.modelId
 
     try {
-      const buildModelInstance = await makeModel(
-        buildProviderId,
-        buildModelId,
-        this.credentials
-      )
+      const buildModel = await makeModel(buildProviderId, buildModelId, this.credentials)
+      const planModel = async (): Promise<LanguageModel> =>
+        planProviderId === buildProviderId && planModelId === buildModelId
+          ? buildModel
+          : makeModel(planProviderId, planModelId, this.credentials)
 
-      let route: 'plan' | 'build'
-      if (mode === 'build') {
-        route = 'build'
-      } else if (mode === 'plan') {
-        route = 'plan'
-      } else {
-        // mode === 'auto' — Router decides, using the Build model. Untitled
-        // scope short-circuits to 'build' inside classifyIntent without an
-        // LLM call.
-        const decision = await classifyIntent({
-          model: buildModelInstance,
-          prompt: args.prompt,
-          scope: args.scope,
-          abortSignal: controller.signal
-        })
-        onEvent({ type: 'route-decision', decision })
-        route = decision.agent
+      const approvalGate = createApprovalGate()
+      const tools =
+        args.scope.kind === 'untitled'
+          ? undefined
+          : makeTools(args.scope, approvalGate.requestApproval)
+
+      const deps: GraphDeps = {
+        emit: onEvent,
+        signal: controller.signal,
+        mode: args.mode ?? 'auto',
+        approvalGate,
+        tools,
+        classify: async () =>
+          classifyIntent({
+            model: buildModel,
+            prompt: args.prompt,
+            scope: args.scope,
+            abortSignal: controller.signal
+          }),
+        plan: async () => {
+          const { partial, final, usage } = streamPlan({
+            model: await planModel(),
+            prompt: args.prompt,
+            scope: args.scope,
+            history: args.history,
+            currentBuffer: args.currentBuffer,
+            abortSignal: controller.signal
+          })
+          try {
+            for await (const chunk of partial) {
+              if (controller.signal.aborted) throw abortMarker()
+              onEvent({ type: 'plan-delta', partial: chunk })
+            }
+            const full = await final
+            onEvent({ type: 'plan-complete', plan: full })
+            // Usage after plan-complete so the UI's token counter folds it
+            // in once the plan visibly settled; failures are non-fatal.
+            try {
+              const u = await usage
+              if (u) onEvent({ type: 'plan-usage', usage: u })
+            } catch {
+              /* no usage data for this turn, that's fine */
+            }
+            return full
+          } catch (err) {
+            if (controller.signal.aborted) throw err
+            throw new Error('plan: ' + (err instanceof Error ? err.message : String(err)))
+          }
+        },
+        step: (messages, plan) =>
+          runBuildStep({
+            model: buildModel,
+            system: buildSystemPrompt(
+              args.scope,
+              args.currentBuffer,
+              args.currentSelection,
+              plan
+            ),
+            messages,
+            tools,
+            signal: controller.signal,
+            emit: onEvent
+          })
       }
 
-      let plan: Plan | undefined
-      if (route === 'plan') {
-        onEvent({ type: 'phase-start', phase: 'plan' })
-        // Plan may use a different provider/model than Build. Instantiate on
-        // demand so we don't pay for a model build when route='build'.
-        const planModelInstance =
-          planProviderId === buildProviderId && planModelId === buildModelId
-            ? buildModelInstance
-            : await makeModel(planProviderId, planModelId, this.credentials)
-        plan = await this.runPlanPhase(args, planModelInstance, controller, onEvent)
-        if (!plan) return
+      const graph = createAgentGraph(deps)
+      const cfg = {
+        configurable: { thread_id: runId },
+        recursionLimit: AGENT_RECURSION_LIMIT,
+        signal: controller.signal
+      }
 
-        onEvent({ type: 'plan-approval-request', plan })
-        const response = await this.planApprovals.request(runId, plan)
-        if (controller.signal.aborted) return
-        if (!response.approved) {
-          onEvent({ type: 'finish' })
-          return
+      // Cast bridges our narrower IPC-friendly HistoryMessage (`unknown`
+      // for JSON values) to the SDK's stricter ModelMessage. At runtime
+      // the payloads serialize identically.
+      const initialMessages: ModelMessage[] = [
+        ...((args.history ?? []) as unknown as ModelMessage[]),
+        { role: 'user', content: args.prompt }
+      ]
+
+      // `as never` bridges the input union (initial state vs Command resume)
+      // past invoke's node-name generic — both shapes are valid at runtime.
+      let input: object = { messages: initialMessages }
+      let finalState: { finishReason?: string; usage?: unknown } | null = null
+      for (;;) {
+        const result = (await graph.invoke(input as never, cfg)) as Record<string, unknown>
+        const interrupts = result.__interrupt__ as
+          | Array<{ id: string; value: unknown }>
+          | undefined
+        if (!interrupts?.length) {
+          finalState = result as { finishReason?: string; usage?: unknown }
+          break
         }
-        plan = response.plan
-        onEvent({ type: 'phase-start', phase: 'build' })
+        const intr = interrupts[0]
+        const resumeValue = await this.bridgeInterrupt(runId, intr.value, onEvent)
+        if (controller.signal.aborted) throw abortMarker()
+        input = new Command({ resume: { [intr.id]: resumeValue } })
       }
 
-      await this.runBuildPhase(runId, args, buildModelInstance, plan, controller, onEvent)
+      onEvent({
+        type: 'finish',
+        usage: finalState?.usage,
+        finishReason: finalState?.finishReason
+      })
     } catch (err) {
       if (controller.signal.aborted) {
         onEvent({ type: 'error', message: 'cancelled' })
@@ -189,106 +267,37 @@ export class AgentRuntime {
       this.approvals.cancelRun(runId)
       this.planApprovals.cancelRun(runId)
       this.runs.delete(runId)
-      // Final safety net — catches every silent `return` path above and
-      // any future refactor that forgets to emit. ensureEmitted is a
-      // no-op when a real finish/error already went out.
+      // Final safety net — catches every silent exit path and any future
+      // refactor that forgets to emit. No-op when finish/error went out.
       guard.ensureEmitted('run ended without a terminal event')
     }
   }
 
   /**
-   * Plan phase. Streams partial objects so the renderer can render steps as
-   * they materialize. Returns the validated final plan, or `undefined` if the
-   * run was aborted or the plan failed to parse.
+   * #123 compat shim: translate a graph interrupt into the legacy approval
+   * events and await the host's respond* call. Removed by #124 when hosts
+   * speak interrupt/resume natively.
    */
-  private async runPlanPhase(
-    args: AgentRunArgs,
-    model: Awaited<ReturnType<typeof makeModel>>,
-    controller: AbortController,
-    onEvent: (event: AgentEvent) => void
-  ): Promise<Plan | undefined> {
-    const { partial, final, usage } = streamPlan({
-      model,
-      prompt: args.prompt,
-      scope: args.scope,
-      history: args.history,
-      currentBuffer: args.currentBuffer,
-      abortSignal: controller.signal
-    })
-    // Drive the partial stream so the UI sees plan steps appearing live, but
-    // also wait for `final` to validate the full plan against the schema.
-    try {
-      for await (const chunk of partial) {
-        if (controller.signal.aborted) return undefined
-        onEvent({ type: 'plan-delta', partial: chunk })
-      }
-      const full = await final
-      onEvent({ type: 'plan-complete', plan: full })
-      // Emit usage *after* plan-complete so the UI's token counter folds it
-      // in only once the plan visibly settled. Failures here are non-fatal —
-      // an SDK that doesn't expose usage just leaves the counter unchanged.
-      try {
-        const u = await usage
-        if (u) onEvent({ type: 'plan-usage', usage: u })
-      } catch {
-        /* SDK promise rejected → no usage data for this turn, that's fine */
-      }
-      return full
-    } catch (err) {
-      if (controller.signal.aborted) {
-        onEvent({ type: 'error', message: 'cancelled' })
-      } else {
-        onEvent({
-          type: 'error',
-          message: 'plan: ' + (err instanceof Error ? err.message : String(err))
-        })
-      }
-      return undefined
-    }
-  }
-
-  /**
-   * Build phase. Same streamText loop Phase 2/3 had; isolated here so the
-   * orchestrator can call it with or without a preceding plan.
-   */
-  private async runBuildPhase(
+  private async bridgeInterrupt(
     runId: string,
-    args: AgentRunArgs,
-    model: Awaited<ReturnType<typeof makeModel>>,
-    plan: Plan | undefined,
-    controller: AbortController,
+    value: unknown,
     onEvent: (event: AgentEvent) => void
-  ): Promise<void> {
-    const requestApproval = (
-      toolCallId: string,
-      payload: ApprovalPayload
-    ): Promise<ApprovalResponse> => {
-      onEvent({ type: 'tool-approval-request', toolCallId, payload })
-      return this.approvals.request(runId, toolCallId, payload)
+  ): Promise<unknown> {
+    const v = value as
+      | { kind: 'plan-approval'; plan: Plan }
+      | { kind: 'tool-approval'; requests: ApprovalRequest[] }
+    if (v.kind === 'plan-approval') {
+      onEvent({ type: 'plan-approval-request', plan: v.plan })
+      return this.planApprovals.request(runId, v.plan)
     }
-    const tools =
-      args.scope.kind === 'untitled' ? undefined : makeTools(args.scope, requestApproval)
-
-    const result = streamText({
-      model,
-      system: buildSystemPrompt(args.scope, args.currentBuffer, args.currentSelection, plan),
-      // Cast bridges our narrower IPC-friendly HistoryMessage (which uses
-      // `unknown` for JSON values) to AI SDK's stricter ModelMessage (uses
-      // `JSONValue`). At runtime the payloads serialize identically.
-      messages: [
-        ...((args.history ?? []) as unknown as ModelMessage[]),
-        { role: 'user', content: args.prompt }
-      ],
-      tools,
-      stopWhen: stepCountIs(15),
-      abortSignal: controller.signal
-    })
-
-    await consumeBuildStream(
-      result.fullStream as AsyncIterable<Record<string, unknown> & { type: string }>,
-      controller.signal,
-      onEvent
+    const decisions: Record<string, ApprovalResponse> = {}
+    await Promise.all(
+      v.requests.map(async (r) => {
+        onEvent({ type: 'tool-approval-request', toolCallId: r.toolCallId, payload: r.payload })
+        decisions[r.toolCallId] = await this.approvals.request(runId, r.toolCallId, r.payload)
+      })
     )
+    return decisions
   }
 
   /**
