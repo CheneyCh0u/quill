@@ -57,6 +57,37 @@ describe('createCodexFetch', () => {
     expect(sent.include).toContain('reasoning.encrypted_content')
   })
 
+  it('strips stored-item reference ids but keeps required reasoning ids', async () => {
+    // Codex 端点 store:false 下两条相反的规则（都来自真实 400）：
+    // - function_call 等 item 的 id 是库引用 → 查不到 "Item with id 'fc_…'
+    //   not found"，必须剥掉（call_id 是请求内配对，保留）
+    // - reasoning item 的 id 是必填字段（"Missing required parameter:
+    //   'input[N].id'"），加密推理内容靠 id 自描述，必须保留
+    const { fn, calls } = recordingFetch(() => sse([{ type: 'response.completed', response: {} }]))
+    const codexFetch = createCodexFetch(async () => TOKENS, fn)
+    await codexFetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      body: JSON.stringify({
+        stream: true,
+        input: [
+          { type: 'message', role: 'user', content: 'hi' },
+          { type: 'reasoning', id: 'rs_r1', encrypted_content: 'blob' },
+          { type: 'function_call', id: 'fc_abc', call_id: 'c1', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_output', id: 'fco_def', call_id: 'c1', output: '{}' }
+        ]
+      })
+    })
+    const sent = JSON.parse(String(calls[0].init?.body)) as {
+      input: Array<Record<string, unknown>>
+    }
+    expect('id' in sent.input[0]).toBe(false)
+    expect(sent.input[1].id).toBe('rs_r1')
+    expect('id' in sent.input[2]).toBe(false)
+    expect('id' in sent.input[3]).toBe(false)
+    expect(sent.input[2].call_id).toBe('c1')
+    expect(sent.input[3].call_id).toBe('c1')
+  })
+
   it('passes streaming responses through untouched', async () => {
     const streamRes = sse([{ type: 'response.output_text.delta', delta: 'hi' }])
     const { fn } = recordingFetch(() => streamRes)

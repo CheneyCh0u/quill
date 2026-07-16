@@ -2,7 +2,7 @@ import { CODEX_API_ENDPOINT, type CodexTokens, type FetchLike } from './codex-au
 
 /**
  * AI SDK 自定义 fetch：SDK 照常请求 api.openai.com/v1/responses，这里在
- * 传输层改写到 ChatGPT 订阅的 Codex 端点并注入订阅鉴权。三个端点怪癖
+ * 传输层改写到 ChatGPT 订阅的 Codex 端点并注入订阅鉴权。四个端点怪癖
  * 也在这层兜住，上层 streamText / generateText 无感：
  *
  * 1. 不认 max_output_tokens（带上 400）→ 剥掉
@@ -23,6 +23,22 @@ function adaptCodexBody(init?: RequestInit): { init?: RequestInit; forcedStream:
     const body = JSON.parse(init.body)
     if (!body || typeof body !== 'object') return { init, forcedStream: false }
     delete body.max_output_tokens
+    // 4) store:false 下服务端不保存 item：function_call 等 item 回传时
+    //    带 id 会被当成库引用去查 → "Item with id 'fc_…' not found"，剥掉
+    //    （call_id 是请求内 call/output 配对，保留）。唯一例外是 reasoning
+    //    item —— 它的 id 是必填字段（缺了报 "Missing required parameter:
+    //    'input[N].id'"），加密推理内容靠 id 自描述。
+    if (Array.isArray(body.input)) {
+      for (const item of body.input) {
+        if (!item || typeof item !== 'object') continue
+        const type = (item as { type?: string }).type
+        // reasoning 的 id 是必填自描述；item_reference 的 id 是它的全部 —
+        // 剥掉只会把「查不到」变成更迷惑的「缺参」（正常路径下 SDK 已被
+        // STEP_PROVIDER_OPTIONS 挡住不发引用，这里只是不糟蹋诊断信息）。
+        if (type === 'reasoning' || type === 'item_reference') continue
+        delete (item as Record<string, unknown>).id
+      }
+    }
     body.store = false
     const include: unknown[] = Array.isArray(body.include) ? body.include : []
     if (!include.includes(REASONING_INCLUDE)) include.push(REASONING_INCLUDE)

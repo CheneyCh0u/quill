@@ -94,6 +94,17 @@ export function stripExecute(tools: AgentTools): ToolSet {
   ) as ToolSet
 }
 
+/**
+ * SDK 必须在调用层感知 store:false — 只在 codexFetch 的传输层改写请求体
+ * 是不够的：SDK 以为服务端有存储，会把上一步的 reasoning/tool-call 优化
+ * 成 item_reference（存储引用），无存储的订阅端点直接 400。显式声明后
+ * SDK 序列化完整 item（reasoning 带 id+加密内容）。include 让加密推理
+ * 内容随响应返回，多步工具调用需要带回。非 openai 系 provider 忽略该键。
+ */
+export const STEP_PROVIDER_OPTIONS: Record<string, Record<string, boolean | string[]>> = {
+  openai: { store: false, include: ['reasoning.encrypted_content'] }
+}
+
 export type RunBuildStepArgs = {
   model: LanguageModel
   system: string
@@ -110,7 +121,8 @@ export async function runBuildStep(args: RunBuildStepArgs): Promise<StepResult> 
     messages: args.messages,
     tools: args.tools ? stripExecute(args.tools) : undefined,
     stopWhen: stepCountIs(1),
-    abortSignal: args.signal
+    abortSignal: args.signal,
+    providerOptions: STEP_PROVIDER_OPTIONS
   })
   const outcome = await consumeStepStream(
     result.fullStream as AsyncIterable<Record<string, unknown> & { type: string }>,

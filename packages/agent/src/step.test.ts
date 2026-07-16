@@ -1,7 +1,11 @@
 /// <reference types="bun" />
 import { describe, it, expect } from 'bun:test'
+import { createOpenAI } from '@ai-sdk/openai'
+import { generateText, tool } from 'ai'
 import { z } from 'zod'
-import { consumeStepStream, stripExecute } from './step'
+import { consumeStepStream, stripExecute, STEP_PROVIDER_OPTIONS } from './step'
+import { createCodexFetch } from './codex-fetch'
+import type { CodexTokens } from './codex-auth'
 import type { AgentEvent } from '@quill/shared-types'
 
 type Chunk = Record<string, unknown> & { type: string }
@@ -91,6 +95,105 @@ describe('consumeStepStream', () => {
         () => {}
       )
     ).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})
+
+describe('multi-step serialization against the codex endpoint', () => {
+  // 回归锁（两次线上 400 的根因）：transport 层设 store:false 而 SDK 不知
+  // 情时，SDK 会把上一步的 reasoning/tool-call 序列化成 item_reference
+  // （存储引用）——无存储端点上必炸（"Item … not found" 或 "Missing
+  // required parameter: 'input[N].id'"）。修复 = SDK 调用层显式传
+  // STEP_PROVIDER_OPTIONS，让它序列化完整 item。此测试走真实 SDK +
+  // 真实 codexFetch，断言第二步请求体不含任何 item_reference。
+  const TOKENS: CodexTokens = {
+    accessToken: 'at',
+    refreshToken: 'rt',
+    expiresAt: Date.now() + 3_600_000,
+    accountId: 'acc'
+  }
+
+  it('feeds prior steps back as full items, never item_reference', async () => {
+    const step1Sse =
+      [
+        {
+          type: 'response.output_item.done',
+          item: { type: 'reasoning', id: 'rs_1', summary: [], encrypted_content: 'ENC' }
+        },
+        {
+          type: 'response.output_item.done',
+          item: {
+            type: 'function_call',
+            id: 'fc_1',
+            call_id: 'call_1',
+            name: 'read_file',
+            arguments: '{"path":"a.md"}',
+            status: 'completed'
+          }
+        },
+        {
+          type: 'response.completed',
+          response: { id: 'r1', model: 'gpt-5.6', created_at: 1752600000, output: [] }
+        }
+      ]
+        .map((e) => `data: ${JSON.stringify(e)}`)
+        .join('\n\n') + '\n\ndata: [DONE]\n'
+    const doneSse =
+      'data: {"type":"response.completed","response":{"id":"r2","model":"gpt-5.6","created_at":1752600000,"output":[]}}\n\ndata: [DONE]\n'
+
+    const bodies: Array<{ input: Array<Record<string, unknown>> }> = []
+    let call = 0
+    const codexFetch = createCodexFetch(
+      async () => TOKENS,
+      async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)))
+        return new Response(call++ === 0 ? step1Sse : doneSse, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' }
+        })
+      }
+    )
+    const openai = createOpenAI({ apiKey: 'x', fetch: codexFetch as typeof fetch })
+    const model = openai.responses('gpt-5.6')
+    const tools = {
+      read_file: tool({ description: 'read', inputSchema: z.object({ path: z.string() }) })
+    }
+
+    const step1 = await generateText({
+      model,
+      messages: [{ role: 'user', content: 'read a.md' }],
+      tools,
+      providerOptions: STEP_PROVIDER_OPTIONS
+    })
+    await generateText({
+      model,
+      messages: [
+        { role: 'user', content: 'read a.md' },
+        ...step1.response.messages,
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call_1',
+              toolName: 'read_file',
+              output: { type: 'json', value: { ok: true } }
+            }
+          ]
+        }
+      ],
+      tools,
+      providerOptions: STEP_PROVIDER_OPTIONS
+    })
+
+    const step2Input = bodies[1].input
+    const types = step2Input.map((i) => i.type ?? i.role)
+    expect(types).not.toContain('item_reference')
+    const reasoning = step2Input.find((i) => i.type === 'reasoning')
+    expect(reasoning?.id).toBe('rs_1')
+    expect(reasoning?.encrypted_content).toBe('ENC')
+    const fc = step2Input.find((i) => i.type === 'function_call')
+    expect(fc?.call_id).toBe('call_1')
+    expect('id' in (fc ?? {})).toBe(false) // 库引用 id 由 codexFetch 剥除
   })
 })
 
