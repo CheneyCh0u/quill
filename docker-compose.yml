@@ -31,6 +31,10 @@ services:
       # Writable runtime state — providers.json (API keys configured
       # via the web settings UI) and any future at-rest state lives here.
       - ./state:/data/state
+      # Optional: expose the host's opencode credentials (read-only) so the
+      # web settings' "导入本地凭证" button can reuse an existing ChatGPT
+      # login without re-authorizing. Harmless when the dir doesn't exist.
+      - ${HOME}/.local/share/opencode:/data/opencode:ro
 
     # Pass-through env so config.yaml can reference ${OPENAI_API_KEY}
     # etc. without baking secrets into the file on disk.

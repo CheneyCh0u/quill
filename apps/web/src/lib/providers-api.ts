@@ -76,8 +76,23 @@ export type CodexPollResult =
   | { status: 'pending' }
   | { status: 'connected'; accountId: string | null }
 
+export type CodexImportResult = { connected: boolean; accountId: string | null }
+
 export const codexApi = {
   status: () => call<CodexStatus>('/api/agent/codex'),
+  /** 复用 opencode 登录：带 data = 上传用户选的 auth.json 内容；
+   *  不带 = 让 server 读它本地（挂载进来）的凭证文件。 */
+  importOpencode: (data?: unknown) =>
+    call<CodexImportResult>(
+      '/api/agent/codex/import',
+      data === undefined
+        ? { method: 'POST' }
+        : {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          }
+    ),
   loginStart: () =>
     call<CodexLoginStart>('/api/agent/codex/login/start', { method: 'POST' }),
   loginPoll: () =>

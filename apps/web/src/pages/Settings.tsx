@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   codexApi,
@@ -198,7 +198,42 @@ function CodexModal({ provider, onClose, onChanged }: CodexModalProps): JSX.Elem
   const [login, setLogin] = useState<CodexLoginStart | null>(null)
   const [model, setModel] = useState(provider.defaultModelId)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState<'start' | 'logout' | 'save' | null>(null)
+  const [busy, setBusy] = useState<'start' | 'import' | 'logout' | 'save' | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  function applyImport(r: { connected: boolean; accountId: string | null }): void {
+    setConnected(r.connected)
+    setAccountId(r.accountId)
+    setError(null)
+    onChanged()
+  }
+
+  // 一键导入（#137）：先让 server 读它本地挂载的 opencode 凭证；server 上
+  // 没有（远程部署）再降级为文件选择上传。
+  async function handleImport(): Promise<void> {
+    setBusy('import')
+    setError(null)
+    try {
+      applyImport(await codexApi.importOpencode())
+    } catch {
+      fileInputRef.current?.click()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleImportFile(file: File): Promise<void> {
+    setBusy('import')
+    setError(null)
+    try {
+      const parsed: unknown = JSON.parse(await file.text())
+      applyImport(await codexApi.importOpencode(parsed))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   useEffect(() => {
     void codexApi
@@ -360,6 +395,33 @@ function CodexModal({ provider, onClose, onChanged }: CodexModalProps): JSX.Elem
             >
               {busy === 'start' ? '启动中…' : '登录 ChatGPT'}
             </button>
+          )}
+          {connected === false && !login && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleImport()}
+                disabled={busy !== null}
+                className="w-full px-4 py-2 rounded text-sm text-[var(--ink-soft)] border border-[var(--rule)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] disabled:opacity-40"
+              >
+                {busy === 'import' ? '导入中…' : '导入本地凭证（opencode）'}
+              </button>
+              <p className="font-serif-zh italic text-[11px] text-[var(--ink-faint)] leading-relaxed">
+                自动读取 server 所在机器的 opencode 登录；不在同一台机器时会弹出文件选择，
+                选 <code className="font-mono not-italic">~/.local/share/opencode/auth.json</code> 即可。
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (f) void handleImportFile(f)
+                }}
+              />
+            </>
           )}
 
           {error && <div className="text-xs text-[var(--accent)]">{error}</div>}

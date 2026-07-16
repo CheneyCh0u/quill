@@ -6,8 +6,11 @@ import {
   CODEX_PROVIDER_ID,
   createCodexTokenSource,
   listSupportedProviders,
+  parseOpencodeAuth,
   pollCodexDeviceAuth,
+  readOpencodeAuth,
   startCodexDeviceAuth,
+  type CodexTokens,
   type CredentialProvider,
   type DeviceAuthPending
 } from '@quill/agent'
@@ -30,6 +33,10 @@ export type AgentDeps = {
   /** OAuth HTTP override for tests — device flow + token refresh go
    *  through this instead of global fetch. */
   codexFetch?: (input: string | URL, init?: RequestInit) => Promise<Response>
+  /** Server-side opencode auth.json (e.g. bind-mounted into the container).
+   *  POST /codex/import with no body reads it — the one-click local-creds
+   *  import for same-host deployments. */
+  opencodeAuthPath?: string
   /** The server's vault root. Always overrides client-supplied scope.root —
    *  the client must not get to point the agent at arbitrary fs paths. */
   vaultRoot: string
@@ -167,6 +174,16 @@ export function createAgentRoutes(
   let codexPending: DeviceAuthPending | null = null
   const NOT_ENABLED = { error: 'subscription login not enabled on this server' }
 
+  // Persist tokens + ensure a model is picked. Keeps a previously-chosen
+  // model across re-logins; defaults otherwise.
+  const connectCodex = async (tokens: CodexTokens): Promise<void> => {
+    if (!codexStore) return
+    await codexStore.save(tokens)
+    if (!(await codexStore.getModel()) && codexProfile) {
+      await codexStore.setModel(codexProfile.defaultModelId)
+    }
+  }
+
   app.get('/codex', requireSession(deps.sessionSecret), async (c) => {
     if (!codexStore) return c.json(NOT_ENABLED, 501)
     const tokens = await codexStore.load()
@@ -190,12 +207,33 @@ export function createAgentRoutes(
     const result = await pollCodexDeviceAuth(codexPending, deps.codexFetch)
     if (result.status === 'pending') return c.json({ status: 'pending' })
     codexPending = null
-    await codexStore.save(result.tokens)
-    // Keep a previously-chosen model across re-logins; default otherwise.
-    if (!(await codexStore.getModel()) && codexProfile) {
-      await codexStore.setModel(codexProfile.defaultModelId)
-    }
+    await connectCodex(result.tokens)
     return c.json({ status: 'connected', accountId: result.tokens.accountId })
+  })
+
+  // Import an existing opencode login (#137). Two sources, one endpoint:
+  // a JSON body (the web client uploads the user-picked auth.json), or —
+  // with no body — the server-side file at deps.opencodeAuthPath (bind-
+  // mounted for same-host deployments, so the button is truly one click).
+  app.post('/codex/import', requireSession(deps.sessionSecret), async (c) => {
+    if (!codexStore) return c.json(NOT_ENABLED, 501)
+    const body = await c.req.json().catch(() => null)
+    if (body !== null) {
+      const tokens = parseOpencodeAuth(body)
+      if (!tokens) {
+        return c.json({ error: '上传的文件里没有可用的 OpenAI oauth 登录（openai.type 需为 oauth 且含 refresh token）' }, 400)
+      }
+      await connectCodex(tokens)
+      return c.json({ connected: true, accountId: tokens.accountId })
+    }
+    if (deps.opencodeAuthPath) {
+      const tokens = await readOpencodeAuth(deps.opencodeAuthPath)
+      if (tokens) {
+        await connectCodex(tokens)
+        return c.json({ connected: true, accountId: tokens.accountId })
+      }
+    }
+    return c.json({ error: 'server 上没有可用的 opencode 凭证' }, 404)
   })
 
   app.post('/codex/login/cancel', requireSession(deps.sessionSecret), (c) => {
