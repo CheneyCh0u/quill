@@ -56,12 +56,25 @@ export function Editor({ value, onChange, theme, filePath, onViewChange }: Props
 
     const extensions = [
       history(),
-      ...(prefs.showLineNumbers ? [lineNumbers()] : []),
-      // foldGutter sits next to lineNumbers when both are on; with line
-      // numbers off it floats alone on the left. CM6 reads fold ranges
-      // from each language pack's syntax tree, so no per-language wiring
-      // needed — plain-text files just show no fold markers.
-      foldGutter(),
+      // Gutter is all-or-nothing: with line numbers off the editor is a
+      // clean iA-Writer-style writing surface — a lone fold-arrow column
+      // reads as debris (#121). Folding stays available via foldKeymap.
+      // Custom markerDOM gives the arrows stable classes so CSS can keep
+      // open-fold arrows hover-only while collapsed markers stay visible
+      // (the only gutter affordance for finding a folded region).
+      ...(prefs.showLineNumbers
+        ? [
+            lineNumbers(),
+            foldGutter({
+              markerDOM(open) {
+                const marker = document.createElement('span')
+                marker.className = open ? 'cm-fold-marker is-open' : 'cm-fold-marker is-closed'
+                marker.textContent = open ? '⌄' : '›'
+                return marker
+              }
+            })
+          ]
+        : []),
       highlightActiveLine(),
       // Search state + match decorations. Driven by our own React panel; we
       // never call `openSearchPanel`, so CM6's built-in panel never shows up.

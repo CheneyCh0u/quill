@@ -51,8 +51,54 @@
 .cm-editor .cm-activeLine {
   background-color: color-mix(in oklch, var(--ink) 3%, transparent) !important;
 }
+
+/* Gutter as annotation, not chrome (#121). Line numbers are marginalia on
+ * the paper: same background as the page, no divider, faint ink. The
+ * current line's number darkens instead of getting a highlight bar. */
+.cm-editor .cm-gutters {
+  background: transparent !important;
+  border-right: none !important;
+}
+.cm-editor .cm-lineNumbers .cm-gutterElement {
+  color: color-mix(in oklch, var(--ink) 32%, transparent) !important;
+  padding: 0 4px 0 16px;
+}
 .cm-editor .cm-activeLineGutter {
-  background-color: color-mix(in oklch, var(--ink) 5%, transparent) !important;
+  background-color: transparent !important;
+  color: color-mix(in oklch, var(--ink) 75%, transparent) !important;
+}
+
+/* Fold arrows live between the numbers and the code. Open-fold arrows are
+ * invisible until the pointer is over the gutter (VS Code behaviour);
+ * collapsed markers stay visible — they're the only way to spot a folded
+ * region from the margin. */
+.cm-editor .cm-foldGutter .cm-gutterElement {
+  padding: 0 6px 0 2px;
+  cursor: pointer;
+}
+.cm-editor .cm-fold-marker {
+  display: inline-block;
+  color: color-mix(in oklch, var(--ink) 40%, transparent);
+  transition: opacity 120ms ease;
+}
+.cm-editor .cm-fold-marker.is-open {
+  opacity: 0;
+}
+.cm-editor .cm-gutters:hover .cm-fold-marker.is-open {
+  opacity: 1;
+}
+.cm-editor .cm-fold-marker:hover {
+  color: var(--ink);
+}
+
+/* Collapsed-region pill in the content: quiet, paper-toned. */
+.cm-editor .cm-foldPlaceholder {
+  background: color-mix(in oklch, var(--ink) 7%, transparent) !important;
+  border: none !important;
+  border-radius: 4px;
+  color: color-mix(in oklch, var(--ink) 55%, transparent) !important;
+  padding: 0 6px;
+  margin: 0 4px;
 }
 
 /* Search highlights — 沿用旧的黄/橙逻辑，但在暗色下降饱和 */
