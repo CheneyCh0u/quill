@@ -6,7 +6,6 @@
     </linearGradient>
   </defs>
 
-  <!-- macOS Big Sur–style rounded background: cream paper -->
   <rect width="1024" height="1024" rx="224" fill="url(#paper)"/>
 
   <!-- Ink plume -->
