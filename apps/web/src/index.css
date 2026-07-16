@@ -54,8 +54,53 @@ select {
 .cm-editor .cm-activeLine {
   background-color: color-mix(in oklch, var(--ink) 3%, transparent) !important;
 }
+
+/* Gutter as annotation, not chrome (#121) — mirrors desktop. Numbers are
+ * marginalia: page background, no divider, faint ink; the current line's
+ * number darkens instead of getting a highlight bar. */
+.cm-editor .cm-gutters {
+  background: transparent !important;
+  border-right: none !important;
+}
+.cm-editor .cm-lineNumbers .cm-gutterElement {
+  color: color-mix(in oklch, var(--ink) 32%, transparent) !important;
+  padding: 0 4px 0 16px;
+}
 .cm-editor .cm-activeLineGutter {
-  background-color: color-mix(in oklch, var(--ink) 5%, transparent) !important;
+  background-color: transparent !important;
+  color: color-mix(in oklch, var(--ink) 75%, transparent) !important;
+}
+.cm-editor .cm-foldGutter .cm-gutterElement {
+  padding: 0 6px 0 2px;
+  cursor: pointer;
+}
+.cm-editor .cm-fold-marker {
+  display: inline-block;
+  color: color-mix(in oklch, var(--ink) 40%, transparent);
+  transition: opacity 120ms ease;
+}
+.cm-editor .cm-fold-marker.is-open {
+  opacity: 0;
+}
+.cm-editor .cm-gutters:hover .cm-fold-marker.is-open {
+  opacity: 1;
+}
+/* Touch devices have no hover — keep open-fold arrows visible there. */
+@media (hover: none) {
+  .cm-editor .cm-fold-marker.is-open {
+    opacity: 1;
+  }
+}
+.cm-editor .cm-fold-marker:hover {
+  color: var(--ink);
+}
+.cm-editor .cm-foldPlaceholder {
+  background: color-mix(in oklch, var(--ink) 7%, transparent) !important;
+  border: none !important;
+  border-radius: 4px;
+  color: color-mix(in oklch, var(--ink) 55%, transparent) !important;
+  padding: 0 6px;
+  margin: 0 4px;
 }
 .cm-editor .cm-searchMatch {
   background-color: rgba(255, 213, 0, 0.42) !important;

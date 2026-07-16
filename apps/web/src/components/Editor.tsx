@@ -65,8 +65,17 @@ export function Editor({ value, onChange, onSave, filePath }: Props): JSX.Elemen
       lineNumbers(),
       // foldGutter reads ranges from each language pack's syntax tree, so
       // every official lang gains click-to-collapse with no per-lang
-      // wiring. Plain-text files just show no fold markers.
-      foldGutter(),
+      // wiring. Plain-text files just show no fold markers. Custom
+      // markerDOM mirrors desktop (#121): stable classes let CSS keep
+      // open-fold arrows hover-only while collapsed markers stay visible.
+      foldGutter({
+        markerDOM(open) {
+          const marker = document.createElement('span')
+          marker.className = open ? 'cm-fold-marker is-open' : 'cm-fold-marker is-closed'
+          marker.textContent = open ? '⌄' : '›'
+          return marker
+        }
+      }),
       highlightActiveLine(),
       // Search state — no panel UI yet, but the keymap (Mod-f / F3) opens
       // CM's default search bar.
