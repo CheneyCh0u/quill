@@ -125,6 +125,25 @@ const api = {
     setDefault: (id: string | null): Promise<void> =>
       ipcRenderer.invoke('providers:setDefault', id)
   },
+  codex: {
+    status: (): Promise<{ connected: boolean; accountId: string | null }> =>
+      ipcRenderer.invoke('codex:status'),
+    loginStart: (): Promise<{
+      deviceAuthId: string
+      userCode: string
+      verificationUrl: string
+      intervalMs: number
+    }> => ipcRenderer.invoke('codex:loginStart'),
+    loginPoll: (): Promise<
+      { status: 'pending' } | { status: 'connected'; accountId: string | null }
+    > => ipcRenderer.invoke('codex:loginPoll'),
+    loginCancel: (): Promise<void> => ipcRenderer.invoke('codex:loginCancel'),
+    detectOpencode: (): Promise<{ found: boolean; path: string }> =>
+      ipcRenderer.invoke('codex:detectOpencode'),
+    importOpencode: (): Promise<{ accountId: string | null }> =>
+      ipcRenderer.invoke('codex:importOpencode'),
+    logout: (): Promise<void> => ipcRenderer.invoke('codex:logout')
+  },
   fs: {
     readFile: (path: string): Promise<string> => ipcRenderer.invoke('fs:readFile', path),
     writeFile: (path: string, content: string): Promise<void> =>

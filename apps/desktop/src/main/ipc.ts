@@ -15,6 +15,16 @@ import {
   getProviderKey
 } from './providers'
 import {
+  codexDetectOpencode,
+  codexImportOpencode,
+  codexLoginCancel,
+  codexLoginPoll,
+  codexLoginStart,
+  codexLogout,
+  codexStatus,
+  getCodexTokensForAgent
+} from './codex'
+import {
   getRemoteUrl,
   setRemoteUrl,
   getRemoteToken,
@@ -59,7 +69,9 @@ async function ensureThemesDir(): Promise<string> {
 // Desktop credential strategy: read from the electron safeStorage-backed
 // keychain. Server will inject a config.yaml-backed implementation instead.
 const credentials: CredentialProvider = {
-  getKey: (providerId) => getProviderKey(providerId)
+  getKey: (providerId) => getProviderKey(providerId),
+  getCodexTokens: (providerId) =>
+    providerId === 'openai-codex' ? getCodexTokensForAgent() : Promise.resolve(null)
 }
 const agent = new AgentRuntime({ credentials })
 
@@ -254,6 +266,18 @@ export function registerIpc(): void {
   ipcMain.handle('providers:setDefault', async (_evt, id: string | null) =>
     setDefaultProvider(id)
   )
+
+  // -------- ChatGPT subscription login (openai-codex provider) ---------
+  // Device-code OAuth: start returns a user code + opens the browser;
+  // renderer polls until the user finishes authorizing. Tokens never
+  // cross IPC — only connection status / account id do.
+  ipcMain.handle('codex:status', async () => codexStatus())
+  ipcMain.handle('codex:loginStart', async () => codexLoginStart())
+  ipcMain.handle('codex:loginPoll', async () => codexLoginPoll())
+  ipcMain.handle('codex:loginCancel', async () => codexLoginCancel())
+  ipcMain.handle('codex:detectOpencode', async () => codexDetectOpencode())
+  ipcMain.handle('codex:importOpencode', async () => codexImportOpencode())
+  ipcMain.handle('codex:logout', async () => codexLogout())
 
   // -------- Remote server connection -----------------------------------
   // Renderer reads + writes the persisted remote URL + session token.
