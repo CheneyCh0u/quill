@@ -18,6 +18,8 @@
     "@ai-sdk/anthropic": "^3.0.78",
     "@ai-sdk/openai": "^3",
     "@ai-sdk/openai-compatible": "^2.0.47",
+    "@langchain/core": "^1.2.3",
+    "@langchain/langgraph": "^1.4.8",
     "@quill/shared-types": "workspace:*",
     "ai": "^6.0.190",
     "zod": "^4.4.3"
