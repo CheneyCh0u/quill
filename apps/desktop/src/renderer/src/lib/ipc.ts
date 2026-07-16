@@ -135,6 +135,15 @@ export const ipc = {
     getDefault: () => window.quill.providers.getDefault(),
     setDefault: (id: string | null) => window.quill.providers.setDefault(id)
   },
+  codex: {
+    status: () => window.quill.codex.status(),
+    loginStart: () => window.quill.codex.loginStart(),
+    loginPoll: () => window.quill.codex.loginPoll(),
+    loginCancel: () => window.quill.codex.loginCancel(),
+    detectOpencode: () => window.quill.codex.detectOpencode(),
+    importOpencode: () => window.quill.codex.importOpencode(),
+    logout: () => window.quill.codex.logout()
+  },
   sync: {
     status: (root: string) => window.quill.sync.status(root),
     enable: (args: { root: string; name: string; remotePath: string }) =>

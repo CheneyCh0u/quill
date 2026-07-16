@@ -12,6 +12,7 @@
 export type ProviderId =
   | 'anthropic'
   | 'openai'
+  | 'openai-codex'
   | 'kimi'
   | 'deepseek'
   | 'glm'
@@ -41,12 +42,17 @@ export type ProviderProfile = {
    *  of `models[]` when models is non-empty (asserted in tests). */
   defaultModelId: string
   /** ai-sdk provider factory to use. */
-  kind: 'openai-compatible' | 'anthropic'
+  kind: 'openai-compatible' | 'anthropic' | 'openai-codex'
+  /** How the user authenticates. Defaults to 'api-key'; 'oauth' providers
+   *  get a login flow instead of a key input in settings. */
+  auth?: 'api-key' | 'oauth'
   /** Where to get an API key (shown as a help link in the add modal). */
   docs?: string
 }
 
 const KIMI_262K = 262_144
+// GPT-5 系列输入上限（总窗口 400K = 272K 输入 + 128K 输出）。
+const GPT5_272K = 272_000
 
 export const PROVIDERS: ProviderProfile[] = [
   {
@@ -66,6 +72,20 @@ export const PROVIDERS: ProviderProfile[] = [
     defaultModelId: '',
     kind: 'openai-compatible',
     docs: 'https://platform.openai.com/api-keys'
+  },
+  {
+    id: 'openai-codex',
+    name: 'OpenAI (ChatGPT 订阅)',
+    // AI SDK 请求这个地址，主进程的 codexFetch 在传输层改写到
+    // ChatGPT 订阅端点（chatgpt.com/backend-api/codex/responses）。
+    baseURL: 'https://api.openai.com/v1',
+    models: [
+      { id: 'gpt-5.5', contextTokens: GPT5_272K, label: 'GPT-5.5' },
+      { id: 'gpt-5.5-codex', contextTokens: GPT5_272K, label: 'GPT-5.5 Codex' }
+    ],
+    defaultModelId: 'gpt-5.5',
+    kind: 'openai-codex',
+    auth: 'oauth'
   },
   {
     id: 'kimi',
@@ -168,6 +188,9 @@ export function validateProviderConfig(input: ProviderConfigInput): ValidationRe
   const profile = getProviderProfile(input.id)
   if (!profile) {
     return { ok: false, error: `未知 provider: ${input.id}` }
+  }
+  if (profile.auth === 'oauth') {
+    return { ok: false, error: `${profile.name} 使用登录授权，不通过 API key 配置` }
   }
   if (profile.models.length === 0) {
     return {
