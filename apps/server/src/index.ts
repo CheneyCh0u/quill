@@ -92,6 +92,9 @@ const agentRoutes = createAgentRoutes({
   vaultRoot: config.vault.path,
   // ChatGPT subscription tokens — chmod 0600 JSON beside providers.json.
   codexStore: new ServerCodexStore(join(STATE_DIR, 'codex-auth.json')),
+  // Same-host deployments bind-mount ~/.local/share/opencode here (see
+  // docker-compose.yml) so the web "导入本地凭证" button is one click.
+  opencodeAuthPath: process.env.QUILL_OPENCODE_AUTH ?? '/data/opencode/auth.json',
   resolveWorkspaceRoot: (id) =>
     resolveWorkspaceRoot(workspacesFile, config.vault.path, id)
 })

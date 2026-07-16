@@ -29,7 +29,11 @@ function fetchQueue(responses: Response[]) {
   }
 }
 
-async function makeApp(opts?: { codex?: boolean; oauthResponses?: Response[] }) {
+async function makeApp(opts?: {
+  codex?: boolean
+  oauthResponses?: Response[]
+  opencodeAuthPath?: string
+}) {
   const dir = mkdtempSync(join(tmpdir(), 'quill-agent-test-'))
   const store = new ProvidersStore(join(dir, 'providers.json'))
   await store.load()
@@ -41,7 +45,8 @@ async function makeApp(opts?: { codex?: boolean; oauthResponses?: Response[] }) 
     sessionSecret: SECRET,
     vaultRoot: dir,
     codexStore,
-    codexFetch: opts?.oauthResponses ? fetchQueue(opts.oauthResponses) : undefined
+    codexFetch: opts?.oauthResponses ? fetchQueue(opts.oauthResponses) : undefined,
+    opencodeAuthPath: opts?.opencodeAuthPath
   })
   const token = await signSession(SECRET, 1)
   const auth = { Authorization: `Bearer ${token}` }
@@ -176,6 +181,63 @@ describe('POST /providers', () => {
       method: 'POST',
       headers: { ...auth, 'content-type': 'application/json' },
       body: JSON.stringify({ id: 'openai-codex', api_key: 'sk-x', model: 'gpt-5.5' })
+    })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /codex/import', () => {
+  const OPENCODE_JSON = {
+    openai: {
+      type: 'oauth',
+      access: 'at-import',
+      refresh: 'rt-import',
+      expires: Date.now() + 3_600_000,
+      accountId: 'acc-imp'
+    }
+  }
+
+  it('imports credentials uploaded in the request body', async () => {
+    const { app, auth } = await makeApp({ codex: true })
+    const res = await app.request('/codex/import', {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify(OPENCODE_JSON)
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { connected: boolean; accountId: string | null }
+    expect(body.connected).toBe(true)
+    expect(body.accountId).toBe('acc-imp')
+    const status = (await (await app.request('/codex', { headers: auth })).json()) as {
+      connected: boolean
+      model: string
+    }
+    expect(status.connected).toBe(true)
+    expect(status.model.length).toBeGreaterThan(0)
+  })
+
+  it('falls back to the server-side opencode file when no body is sent', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'quill-opencode-'))
+    const authFile = join(dir, 'auth.json')
+    await Bun.write(authFile, JSON.stringify(OPENCODE_JSON))
+    const { app, auth } = await makeApp({ codex: true, opencodeAuthPath: authFile })
+    const res = await app.request('/codex/import', { method: 'POST', headers: auth })
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { connected: boolean }).connected).toBe(true)
+  })
+
+  it('404s when neither body nor server-side file has usable credentials', async () => {
+    const { app, auth } = await makeApp({ codex: true })
+    const res = await app.request('/codex/import', { method: 'POST', headers: auth })
+    expect(res.status).toBe(404)
+  })
+
+  it('400s on a body without an oauth openai entry', async () => {
+    const { app, auth } = await makeApp({ codex: true })
+    const res = await app.request('/codex/import', {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ openai: { type: 'api', key: 'sk-x' } })
     })
     expect(res.status).toBe(400)
   })
