@@ -1,28 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1e293b"/>
-      <stop offset="100%" stop-color="#0b1220"/>
-    </linearGradient>
-    <linearGradient id="plume" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#cbd5e1"/>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f7f2e6"/>
+      <stop offset="100%" stop-color="#ece4d2"/>
     </linearGradient>
   </defs>
 
-  <!-- macOS Big Sur–style rounded background -->
-  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <!-- macOS Big Sur–style rounded background: cream paper -->
+  <rect width="1024" height="1024" rx="224" fill="url(#paper)"/>
 
-  <!-- Feather, based on lucide's path, scaled & centered -->
-  <g transform="translate(96, 96) scale(34)" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Plume body, slightly tinted fill so the silhouette reads at small sizes -->
-    <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"
-          fill="url(#plume)" stroke="#f8fafc" stroke-width="1.5"/>
-    <!-- Center vein -->
-    <line x1="17.5" y1="15" x2="9" y2="15"
-          stroke="#94a3b8" stroke-width="0.85"/>
-    <!-- Quill shaft trailing below -->
-    <line x1="16" y1="8" x2="2" y2="22"
-          stroke="#f8fafc" stroke-width="1.5"/>
+  <!-- Ink plume -->
+  <path d="M686 168
+           C 822 210 868 380 780 510
+           C 712 610 596 684 486 716
+           C 448 727 417 730 398 727
+           C 395 706 400 672 413 632
+           C 452 512 528 384 606 288
+           C 633 254 661 212 686 168 Z"
+        fill="#191713"/>
+
+  <!-- Barb notches, paper-colored cuts into the plume -->
+  <g stroke="#f2ecdc" stroke-width="17" stroke-linecap="round">
+    <line x1="775" y1="392" x2="647" y2="437"/>
+    <line x1="722" y1="512" x2="601" y2="543"/>
+    <line x1="626" y1="620" x2="527" y2="641"/>
   </g>
+
+  <!-- Quill shaft, ending at the writing tip -->
+  <path d="M686 168 C 590 306 462 512 330 800"
+        fill="none" stroke="#191713" stroke-width="26" stroke-linecap="round"/>
+
+  <!-- Vermillion seal -->
+  <rect x="688" y="708" width="112" height="112" rx="16" fill="#c33a1f"/>
+  <path d="M726 744 h36 M744 744 v44 M726 788 h36"
+        stroke="#f7f2e6" stroke-width="10" stroke-linecap="round" fill="none"/>
 </svg>
