@@ -6,7 +6,6 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  Wrench,
   FilePlus,
   FilePen,
   FileText,
@@ -610,6 +609,24 @@ export function AgentPanel({ onClose }: Props) {
     })
   }, [items, compressing, provider, buildChoice])
 
+  // Cross-links between tool-call / tool-result transcript items (#125):
+  // resolved ids hide the standalone call row (the result row represents
+  // the whole call), args feed the result row's expanded view.
+  const resolvedToolIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const it of items) {
+      if (it.kind === 'tool-result') ids.add(it.toolCallId)
+    }
+    return ids
+  }, [items])
+  const toolArgsById = useMemo(() => {
+    const map = new Map<string, unknown>()
+    for (const it of items) {
+      if (it.kind === 'tool-call') map.set(it.toolCallId, it.args)
+    }
+    return map
+  }, [items])
+
   const canRun = !!scope && !!provider && !busy && input.trim().length > 0
   const canCancel = busy && runId !== null
 
@@ -1023,16 +1040,27 @@ export function AgentPanel({ onClose }: Props) {
               : '没有打开任何文件或文件夹'}
           </div>
         )}
-        {items.map((item, i) => (
-          <ItemView
-            key={i}
-            item={item}
-            onApproval={handleApproval}
-            onPlanStepToggle={handlePlanStepToggle}
-            onPlanExecute={handlePlanExecute}
-            onPlanDismiss={handlePlanDismiss}
-          />
-        ))}
+        {items.map((item, i) => {
+          // 完成的调用由结果行代表（一行折叠、点开含参数+结果），调用行
+          // 只在结果未到时存在 —— 即"正在运行的那条"。见 #125。
+          if (item.kind === 'tool-call' && resolvedToolIds.has(item.toolCallId)) {
+            return null
+          }
+          return (
+            <ItemView
+              key={i}
+              item={item}
+              onApproval={handleApproval}
+              onPlanStepToggle={handlePlanStepToggle}
+              onPlanExecute={handlePlanExecute}
+              onPlanDismiss={handlePlanDismiss}
+              toolRunning={item.kind === 'tool-call' && busy}
+              toolArgs={
+                item.kind === 'tool-result' ? toolArgsById.get(item.toolCallId) : undefined
+              }
+            />
+          )
+        })}
         {busy && (
           <div className="flex items-center gap-2 text-[12px] text-[var(--ink-faint)]">
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -1099,13 +1127,19 @@ function ItemView({
   onApproval,
   onPlanStepToggle,
   onPlanExecute,
-  onPlanDismiss
+  onPlanDismiss,
+  toolRunning,
+  toolArgs
 }: {
   item: Item
   onApproval: (toolCallId: string, approved: boolean) => Promise<void>
   onPlanStepToggle: (stepIndex: number) => void
   onPlanExecute: () => Promise<void>
   onPlanDismiss: () => Promise<void>
+  /** tool-call items only: the call hasn't resolved and the run is live. */
+  toolRunning?: boolean
+  /** tool-result items only: matching call's args for the expanded view. */
+  toolArgs?: unknown
 }) {
   if (item.kind === 'user') {
     return (
@@ -1151,10 +1185,10 @@ function ItemView({
     return <AssistantText text={item.text} />
   }
   if (item.kind === 'tool-call') {
-    return <ToolCallView name={item.name} args={item.args} />
+    return <ToolCallView name={item.name} args={item.args} running={toolRunning} />
   }
   if (item.kind === 'tool-result') {
-    return <ToolResultView name={item.name} result={item.result} />
+    return <ToolResultView name={item.name} result={item.result} args={toolArgs} />
   }
   if (item.kind === 'approval') {
     return <ApprovalCardView item={item} onApproval={onApproval} />
@@ -1541,21 +1575,70 @@ function ApplyEditPreview({
   )
 }
 
-function ToolCallView({ name, args }: { name: string; args: unknown }) {
+/** Mirrors web's summarizeArgs — one glanceable token for the collapsed row. */
+function summarizeArgs(args: unknown): string {
+  if (typeof args !== 'object' || args === null) return String(args)
+  const obj = args as Record<string, unknown>
+  for (const key of ['path', 'query', 'url', 'pattern']) {
+    if (typeof obj[key] === 'string') return `${key}=${obj[key]}`
+  }
+  return JSON.stringify(obj).slice(0, 80)
+}
+
+/**
+ * 只在调用还没有结果时渲染（有结果后由 ToolResultView 一行代表整次调用，
+ * 见 #125）。运行中带 spinner，是 transcript 里唯一"摊开"的工具行。
+ */
+function ToolCallView({
+  name,
+  args,
+  running
+}: {
+  name: string
+  args: unknown
+  running?: boolean
+}) {
+  const [open, setOpen] = useState(false)
   return (
     <div className="text-[12px] border-l-2 border-[var(--rule)] pl-2">
-      <div className="flex items-center gap-1 text-[var(--ink-soft)]">
-        <Wrench className="w-3 h-3" />
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="no-drag flex items-center gap-1 text-[var(--ink-soft)] hover:text-[var(--ink)] transition w-full text-left"
+      >
+        {running ? (
+          <Loader2 className="w-3 h-3 animate-spin text-[var(--accent)] shrink-0" />
+        ) : open ? (
+          <ChevronDown className="w-3 h-3 shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 shrink-0" />
+        )}
         <span className="font-mono">{name}</span>
-      </div>
-      <pre className="font-mono text-[11px] text-[var(--ink-faint)] mt-0.5 overflow-x-auto whitespace-pre-wrap break-all">
-        {JSON.stringify(args, null, 2)}
-      </pre>
+        {!open && (
+          <span className="font-mono text-[11px] text-[var(--ink-faint)] truncate ml-1 min-w-0">
+            {summarizeArgs(args)}
+          </span>
+        )}
+      </button>
+      {open && (
+        <pre className="font-mono text-[11px] text-[var(--ink-faint)] mt-0.5 overflow-x-auto whitespace-pre-wrap break-all">
+          {JSON.stringify(args, null, 2)}
+        </pre>
+      )}
     </div>
   )
 }
 
-function ToolResultView({ name, result }: { name: string; result: unknown }) {
+/** One collapsed row per finished call: `› name → preview`; expanding shows
+ *  the arguments (when the call item is nearby) plus the full result. */
+function ToolResultView({
+  name,
+  result,
+  args
+}: {
+  name: string
+  result: unknown
+  args?: unknown
+}) {
   const [open, setOpen] = useState(false)
   const preview =
     typeof result === 'string'
@@ -1566,9 +1649,13 @@ function ToolResultView({ name, result }: { name: string; result: unknown }) {
     <div className="text-[12px] border-l-2 border-[var(--accent)]/40 pl-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="no-drag flex items-center gap-1 text-[var(--ink-soft)] hover:text-[var(--ink)] transition"
+        className="no-drag flex items-center gap-1 text-[var(--ink-soft)] hover:text-[var(--ink)] transition w-full text-left"
       >
-        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        {open ? (
+          <ChevronDown className="w-3 h-3 shrink-0" />
+        ) : (
+          <ChevronRight className="w-3 h-3 shrink-0" />
+        )}
         <span className="font-mono">{name}</span>
         <span className="font-serif-zh italic text-[var(--ink-faint)] ml-1">→</span>
         {!open && (
@@ -1579,9 +1666,16 @@ function ToolResultView({ name, result }: { name: string; result: unknown }) {
         )}
       </button>
       {open && (
-        <pre className="font-mono text-[11px] text-[var(--ink-faint)] mt-1 overflow-x-auto whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto">
-          {full}
-        </pre>
+        <div className="mt-1 space-y-1">
+          {args !== undefined && (
+            <pre className="font-mono text-[11px] text-[var(--ink-faint)] overflow-x-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(args, null, 2)}
+            </pre>
+          )}
+          <pre className="font-mono text-[11px] text-[var(--ink-faint)] overflow-x-auto whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto border-t border-[var(--rule-soft)] pt-1">
+            {full}
+          </pre>
+        </div>
       )}
     </div>
   )
