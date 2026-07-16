@@ -8,6 +8,12 @@ class FakeVault implements VaultProvider {
   files = new Map<string, string>()
   dirs = new Set<string>()
 
+  readBinary(path: string): Promise<Uint8Array> {
+    const f = this.files.get(path)
+    if (f === undefined) return Promise.reject(new Error(`not found: ${path}`))
+    return Promise.resolve(new TextEncoder().encode(f))
+  }
+
   read(path: string): Promise<string> {
     const f = this.files.get(path)
     if (!f) return Promise.reject(new Error(`not found: ${path}`))
