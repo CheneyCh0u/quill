@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Menu, Settings as SettingsIcon, Sparkles, X } from 'lucide-react'
 import { getFileType, type FileNode, type Scope, type Workspace } from '@quill/shared-types'
 import { AgentPanel } from '../components/AgentPanel'
 import { DownloadMenu } from '../components/DownloadMenu'
@@ -10,7 +11,6 @@ import { Outline, OutlineSheetButton } from '../components/Outline'
 import { Preview } from '../components/Preview'
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher'
 import { RemoteVault, UnauthorizedError } from '@quill/vault-adapter'
-import { logout } from '../lib/auth'
 import { notifyUnauthorized } from '../lib/auth-events'
 import { useDialogs } from '../lib/dialogs'
 import { useAgentSession } from '../lib/use-agent-session'
@@ -250,20 +250,6 @@ export function Vault(): JSX.Element {
     setMode(node.isMarkdown ? 'preview' : 'edit')
   }
 
-  async function onLogout(): Promise<void> {
-    if (dirty) {
-      const ok = await dialogs.confirm({
-        title: '放弃未保存的修改',
-        message: '当前文件有未保存的修改，确认登出？',
-        confirmText: '登出',
-        danger: true
-      })
-      if (!ok) return
-    }
-    await logout()
-    navigate('/login', { replace: true })
-  }
-
   return (
     <div className="h-[100dvh] flex">
       {/* Sidebar: full-screen drawer on mobile (so iOS Safari chrome
@@ -283,10 +269,10 @@ export function Vault(): JSX.Element {
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
-            className="md:hidden text-[var(--ink-soft)] text-lg leading-none px-1"
+            className="md:hidden text-[var(--ink-soft)] p-1"
             aria-label="关闭侧栏"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
           {workspace ? (
             <WorkspaceSwitcher
@@ -298,13 +284,6 @@ export function Vault(): JSX.Element {
           ) : (
             <span className="font-display text-lg text-[var(--ink)] flex-1">Quill</span>
           )}
-          <button
-            type="button"
-            onClick={onLogout}
-            className="text-xs text-[var(--ink-faint)] hover:text-[var(--accent)] px-2 py-1"
-          >
-            登出
-          </button>
         </div>
         <div className="flex-1 overflow-hidden">
           {workspace === null ? (
@@ -352,7 +331,7 @@ export function Vault(): JSX.Element {
             className="md:hidden text-[var(--ink-soft)] p-2"
             aria-label="切换侧栏"
           >
-            ☰
+            <Menu className="w-4 h-4" />
           </button>
           <span className="text-sm text-[var(--ink-soft)] truncate flex items-center gap-1.5 flex-1 min-w-0">
             <span className="truncate">{selected?.path ?? '选择一个文件'}</span>
@@ -383,22 +362,24 @@ export function Vault(): JSX.Element {
             type="button"
             onClick={() => setAiOpen((o) => !o)}
             aria-pressed={aiOpen}
-            title="AI"
+            title="AI 面板"
+            aria-label="AI 面板"
             className={[
-              'text-sm rounded px-2 py-1 transition-colors',
+              'rounded p-1.5 transition-colors',
               aiOpen
                 ? 'bg-[var(--accent-soft)] text-[var(--ink)]'
                 : 'text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)]'
             ].join(' ')}
           >
-            AI
+            <Sparkles className="w-4 h-4" />
           </button>
           <Link
             to="/settings"
             title="设置"
-            className="text-base text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded px-2 py-1 leading-none"
+            aria-label="设置"
+            className="text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded p-1.5 leading-none"
           >
-            ⚙
+            <SettingsIcon className="w-4 h-4" />
           </Link>
         </header>
         <div className="flex-1 flex min-h-0">

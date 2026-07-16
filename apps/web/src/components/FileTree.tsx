@@ -6,6 +6,7 @@ import {
   useRef,
   useState
 } from 'react'
+import { FilePlus2, FolderPlus, Upload } from 'lucide-react'
 import { allTextExtensions, getFileType, type FileNode } from '@quill/shared-types'
 import type { VaultProvider } from '@quill/vault-adapter'
 import { useDialogs } from '../lib/dialogs'
@@ -412,25 +413,28 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
             type="button"
             onClick={() => void newFile()}
             title="新建文件"
-            className="text-sm text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded px-1.5 py-0.5"
+            aria-label="新建文件"
+            className="text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded p-1"
           >
-            📄+
+            <FilePlus2 className="w-4 h-4" />
           </button>
           <button
             type="button"
             onClick={() => void newFolder()}
             title="新建文件夹"
-            className="text-sm text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded px-1.5 py-0.5"
+            aria-label="新建文件夹"
+            className="text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded p-1"
           >
-            📁+
+            <FolderPlus className="w-4 h-4" />
           </button>
           <button
             type="button"
             onClick={() => triggerUpload(currentDir())}
             title="上传 .md 文件"
-            className="text-sm text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded px-1.5 py-0.5"
+            aria-label="上传 .md 文件"
+            className="text-[var(--ink-faint)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] rounded p-1"
           >
-            📤
+            <Upload className="w-4 h-4" />
           </button>
         </div>
       </header>

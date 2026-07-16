@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import type { ApprovalPayload, Scope, SessionIndex } from '@quill/shared-types'
 import { renderMarkdown } from '../lib/markdown'
 import type { AgentSession, AgentTurn, SelectedModel } from '../lib/use-agent-session'
@@ -87,7 +88,7 @@ export function AgentPanel({
     return (
       <PanelShell onClose={onClose} status={status}>
         <div className="p-4 text-sm text-[var(--ink-soft)]">
-          未配置 AI provider。点击右上角 ⚙ 进入设置，配上一个 provider 即可使用。
+          未配置 AI provider。点击右上角设置图标进入设置，配上一个 provider 即可使用。
         </div>
       </PanelShell>
     )
@@ -263,10 +264,10 @@ function PanelShell({
         <button
           type="button"
           onClick={onClose}
-          className="text-[var(--ink-faint)] hover:text-[var(--ink)] text-sm px-2"
+          className="text-[var(--ink-faint)] hover:text-[var(--ink)] px-2"
           aria-label="关闭 AI 面板"
         >
-          ✕
+          <X className="w-4 h-4" />
         </button>
       </header>
       {children}
