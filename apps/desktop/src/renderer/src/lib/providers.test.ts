@@ -123,6 +123,23 @@ describe('isKnownProvider', () => {
   })
 })
 
+describe('registry sync with @quill/agent PROFILES', () => {
+  it('every renderer provider matches the agent profile (models / default / baseURL / kind)', async () => {
+    const { listSupportedProviders } = await import('@quill/agent')
+    const profiles = new Map(listSupportedProviders().map((p) => [p.id, p]))
+    for (const p of PROVIDERS) {
+      const agent = profiles.get(p.id)
+      expect(agent).toBeDefined()
+      expect(agent!.kind).toBe(p.kind)
+      expect(agent!.baseURL).toBe(p.baseURL)
+      expect(agent!.defaultModelId).toBe(p.defaultModelId)
+      expect(agent!.models.map((m) => [m.id, m.contextTokens])).toEqual(
+        p.models.map((m) => [m.id, m.contextTokens])
+      )
+    }
+  })
+})
+
 describe('openai-codex (ChatGPT subscription)', () => {
   it('is an oauth provider with a usable model catalog', () => {
     const codex = getProviderProfile('openai-codex')!

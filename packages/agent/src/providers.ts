@@ -33,9 +33,36 @@ export type ProviderProfile = {
 }
 
 const KIMI_262K = 262_144
-// GPT-5 系列输入上限（总窗口 400K = 272K 输入 + 128K 输出）；压缩阈值
-// 按输入侧算。
-const GPT5_272K = 272_000
+// 上下文窗口来自 models.dev（2026-07）：5.4+ 主线 1.05M，codex/mini 线
+// 400K，codex-spark 128K。
+const GPT_1M = 1_050_000
+const GPT_400K = 400_000
+const GPT_128K = 128_000
+
+export const CODEX_MODELS: ProviderModel[] = [
+  { id: 'gpt-5.6', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.5', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.4', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-mini', contextTokens: GPT_400K },
+  { id: 'gpt-5.4-mini-fast', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex-spark', contextTokens: GPT_128K },
+  { id: 'gpt-5.2', contextTokens: GPT_400K }
+]
 
 /**
  * Minimal mirror of `renderer/src/lib/providers.ts` PROVIDERS. Keep in sync
@@ -66,11 +93,11 @@ export const PROFILES: Record<string, ProviderProfile> = {
     id: 'openai-codex',
     kind: 'openai-codex',
     baseURL: 'https://api.openai.com/v1',
-    models: [
-      { id: 'gpt-5.5', contextTokens: GPT5_272K, label: 'GPT-5.5' },
-      { id: 'gpt-5.5-codex', contextTokens: GPT5_272K, label: 'GPT-5.5 Codex' }
-    ],
-    defaultModelId: 'gpt-5.5'
+    // 订阅端点接受的完整模型集，镜像自 `opencode models` 的 openai/*
+    // 输出（2026-07）。上下文窗口对照 models.dev；-fast/-pro 变体按基础
+    // 型号取值。列表过期时重跑 `opencode models` 对齐即可。
+    models: CODEX_MODELS,
+    defaultModelId: 'gpt-5.6'
   },
   // Kimi Coding Plan endpoint speaks the Anthropic protocol and allowlists
   // clients by SDK shape — OpenAI-compatible calls are rejected with

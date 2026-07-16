@@ -51,8 +51,37 @@ export type ProviderProfile = {
 }
 
 const KIMI_262K = 262_144
-// GPT-5 系列输入上限（总窗口 400K = 272K 输入 + 128K 输出）。
-const GPT5_272K = 272_000
+// 上下文窗口来自 models.dev（2026-07）：5.4+ 主线 1.05M，codex/mini 线
+// 400K，codex-spark 128K。订阅端点的完整模型集镜像自 `opencode models`
+// 的 openai/* 输出，需与 @quill/agent 的 CODEX_MODELS 保持同步。
+const GPT_1M = 1_050_000
+const GPT_400K = 400_000
+const GPT_128K = 128_000
+
+const CODEX_MODELS: ProviderModel[] = [
+  { id: 'gpt-5.6', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.5', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.4', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-mini', contextTokens: GPT_400K },
+  { id: 'gpt-5.4-mini-fast', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex-spark', contextTokens: GPT_128K },
+  { id: 'gpt-5.2', contextTokens: GPT_400K }
+]
 
 export const PROVIDERS: ProviderProfile[] = [
   {
@@ -79,11 +108,8 @@ export const PROVIDERS: ProviderProfile[] = [
     // AI SDK 请求这个地址，主进程的 codexFetch 在传输层改写到
     // ChatGPT 订阅端点（chatgpt.com/backend-api/codex/responses）。
     baseURL: 'https://api.openai.com/v1',
-    models: [
-      { id: 'gpt-5.5', contextTokens: GPT5_272K, label: 'GPT-5.5' },
-      { id: 'gpt-5.5-codex', contextTokens: GPT5_272K, label: 'GPT-5.5 Codex' }
-    ],
-    defaultModelId: 'gpt-5.5',
+    models: CODEX_MODELS,
+    defaultModelId: 'gpt-5.6',
     kind: 'openai-codex',
     auth: 'oauth'
   },
