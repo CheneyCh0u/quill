@@ -24,6 +24,21 @@ import type { CredentialProvider } from './credentials'
 export type { CredentialProvider } from './credentials'
 export { migrateModelId, listSupportedProviders } from './providers'
 export type { ProviderKind, ProviderProfile } from './providers'
+export {
+  CODEX_PROVIDER_ID,
+  createCodexTokenSource,
+  defaultOpencodeAuthPath,
+  parseOpencodeAuth,
+  pollCodexDeviceAuth,
+  readOpencodeAuth,
+  startCodexDeviceAuth
+} from './codex-auth'
+export type {
+  CodexAuthStore,
+  CodexTokens,
+  DeviceAuthPending,
+  DeviceAuthPollResult
+} from './codex-auth'
 export { buildSystemPrompt } from './prompt'
 export { createContextStore } from './context'
 export type { SessionIndex, SessionMeta } from './context'

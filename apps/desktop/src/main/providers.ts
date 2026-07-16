@@ -92,12 +92,25 @@ export async function upsertProvider(
     )
   }
   const safeId = sanitizeId(id)
-  const metaPath = join(PROVIDERS_DIR, `${safeId}.json`)
   const keyPath = join(PROVIDERS_DIR, `${safeId}.enc`)
 
   // Encrypt key via OS keychain
   const encrypted = safeStorage.encryptString(key)
   await fs.writeFile(keyPath, encrypted)
+
+  await writeProviderMeta(safeId, model)
+}
+
+/**
+ * Write just the metadata entry (no key). Besides upsertProvider, the
+ * ChatGPT subscription login uses this to surface `openai-codex` in the
+ * configured-providers list — its credential is an OAuth token stored
+ * separately (see codex.ts), not an API key.
+ */
+export async function writeProviderMeta(id: string, model: string): Promise<void> {
+  await ensureDirs()
+  const safeId = sanitizeId(id)
+  const metaPath = join(PROVIDERS_DIR, `${safeId}.json`)
 
   // Preserve addedAt on update so user can see original install date
   let addedAt = Date.now()

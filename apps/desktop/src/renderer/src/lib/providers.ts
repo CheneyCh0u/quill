@@ -12,6 +12,7 @@
 export type ProviderId =
   | 'anthropic'
   | 'openai'
+  | 'openai-codex'
   | 'kimi'
   | 'deepseek'
   | 'glm'
@@ -41,12 +42,46 @@ export type ProviderProfile = {
    *  of `models[]` when models is non-empty (asserted in tests). */
   defaultModelId: string
   /** ai-sdk provider factory to use. */
-  kind: 'openai-compatible' | 'anthropic'
+  kind: 'openai-compatible' | 'anthropic' | 'openai-codex'
+  /** How the user authenticates. Defaults to 'api-key'; 'oauth' providers
+   *  get a login flow instead of a key input in settings. */
+  auth?: 'api-key' | 'oauth'
   /** Where to get an API key (shown as a help link in the add modal). */
   docs?: string
 }
 
 const KIMI_262K = 262_144
+// 上下文窗口来自 models.dev（2026-07）：5.4+ 主线 1.05M，codex/mini 线
+// 400K，codex-spark 128K。订阅端点的完整模型集镜像自 `opencode models`
+// 的 openai/* 输出，需与 @quill/agent 的 CODEX_MODELS 保持同步。
+const GPT_1M = 1_050_000
+const GPT_400K = 400_000
+const GPT_128K = 128_000
+
+const CODEX_MODELS: ProviderModel[] = [
+  { id: 'gpt-5.6', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.5', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.4', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-mini', contextTokens: GPT_400K },
+  { id: 'gpt-5.4-mini-fast', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex-spark', contextTokens: GPT_128K },
+  { id: 'gpt-5.2', contextTokens: GPT_400K }
+]
 
 export const PROVIDERS: ProviderProfile[] = [
   {
@@ -66,6 +101,17 @@ export const PROVIDERS: ProviderProfile[] = [
     defaultModelId: '',
     kind: 'openai-compatible',
     docs: 'https://platform.openai.com/api-keys'
+  },
+  {
+    id: 'openai-codex',
+    name: 'OpenAI (ChatGPT 订阅)',
+    // AI SDK 请求这个地址，主进程的 codexFetch 在传输层改写到
+    // ChatGPT 订阅端点（chatgpt.com/backend-api/codex/responses）。
+    baseURL: 'https://api.openai.com/v1',
+    models: CODEX_MODELS,
+    defaultModelId: 'gpt-5.6',
+    kind: 'openai-codex',
+    auth: 'oauth'
   },
   {
     id: 'kimi',
@@ -168,6 +214,9 @@ export function validateProviderConfig(input: ProviderConfigInput): ValidationRe
   const profile = getProviderProfile(input.id)
   if (!profile) {
     return { ok: false, error: `未知 provider: ${input.id}` }
+  }
+  if (profile.auth === 'oauth') {
+    return { ok: false, error: `${profile.name} 使用登录授权，不通过 API key 配置` }
   }
   if (profile.models.length === 0) {
     return {

@@ -133,21 +133,29 @@ export function ProvidersPanel() {
         不写入应用偏好设置。
       </p>
 
-      {modal && (
-        <ProviderModal
-          provider={modal.provider}
-          existingMeta={configuredMap.get(modal.provider.id)}
-          onClose={() => setModal(null)}
-          onSaved={() => {
-            setModal(null)
-            void reload()
-          }}
-          onRemoved={() => {
-            setModal(null)
-            void reload()
-          }}
-        />
-      )}
+      {modal &&
+        (modal.provider.auth === 'oauth' ? (
+          <CodexModal
+            provider={modal.provider}
+            existingMeta={configuredMap.get(modal.provider.id)}
+            onClose={() => setModal(null)}
+            onChanged={() => void reload()}
+          />
+        ) : (
+          <ProviderModal
+            provider={modal.provider}
+            existingMeta={configuredMap.get(modal.provider.id)}
+            onClose={() => setModal(null)}
+            onSaved={() => {
+              setModal(null)
+              void reload()
+            }}
+            onRemoved={() => {
+              setModal(null)
+              void reload()
+            }}
+          />
+        ))}
     </div>
   )
 }
@@ -384,6 +392,280 @@ function ProviderModal({
           >
             {busy === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin inline" /> : '保存'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type CodexModalProps = {
+  provider: ProviderProfile
+  existingMeta?: StoredMeta
+  onClose: () => void
+  /** Reloads the panel list (login/logout/model changes) without closing. */
+  onChanged: () => void
+}
+
+type CodexLoginPending = {
+  userCode: string
+  verificationUrl: string
+  intervalMs: number
+}
+
+/**
+ * ChatGPT 订阅登录 modal — 代替 API key 表单。三个入口：设备码登录
+ * （展示 user code，浏览器授权，轮询直到完成）、复用 opencode 已有登录、
+ * 已登录后的模型选择 / 退出登录。
+ */
+function CodexModal({ provider, existingMeta, onClose, onChanged }: CodexModalProps) {
+  const [connected, setConnected] = useState<boolean | null>(null)
+  const [accountId, setAccountId] = useState<string | null>(null)
+  const [opencodeFound, setOpencodeFound] = useState(false)
+  const [login, setLogin] = useState<CodexLoginPending | null>(null)
+  const [busy, setBusy] = useState<'start' | 'import' | 'logout' | 'save' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const initialModel =
+    existingMeta?.model && provider.models.some((m) => m.id === existingMeta.model)
+      ? existingMeta.model
+      : provider.defaultModelId
+  const [model, setModel] = useState(initialModel)
+
+  useEffect(() => {
+    void ipc.codex.status().then((s) => {
+      setConnected(s.connected)
+      setAccountId(s.accountId)
+    })
+    void ipc.codex.detectOpencode().then((r) => setOpencodeFound(r.found))
+  }, [])
+
+  // Poll the device flow while a login is pending. Cleanup cancels the
+  // main-process flow so closing the dialog mid-login doesn't leak it.
+  useEffect(() => {
+    if (!login) return
+    let stopped = false
+    const timer = setInterval(async () => {
+      try {
+        const r = await ipc.codex.loginPoll()
+        if (stopped || r.status === 'pending') return
+        clearInterval(timer)
+        setLogin(null)
+        setConnected(true)
+        setAccountId(r.accountId)
+        onChanged()
+      } catch (e) {
+        if (stopped) return
+        clearInterval(timer)
+        setLogin(null)
+        setError(e instanceof Error ? e.message : '登录失败')
+      }
+    }, login.intervalMs)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      void ipc.codex.loginCancel()
+    }
+  }, [login, onChanged])
+
+  const handleLoginStart = useCallback(async () => {
+    setBusy('start')
+    setError(null)
+    try {
+      const pending = await ipc.codex.loginStart()
+      setLogin(pending)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '启动登录失败')
+    } finally {
+      setBusy(null)
+    }
+  }, [])
+
+  const handleImport = useCallback(async () => {
+    setBusy('import')
+    setError(null)
+    try {
+      const r = await ipc.codex.importOpencode()
+      setConnected(true)
+      setAccountId(r.accountId)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '导入失败')
+    } finally {
+      setBusy(null)
+    }
+  }, [onChanged])
+
+  const handleLogout = useCallback(async () => {
+    setBusy('logout')
+    setError(null)
+    try {
+      await ipc.codex.logout()
+      setConnected(false)
+      setAccountId(null)
+      onChanged()
+    } finally {
+      setBusy(null)
+    }
+  }, [onChanged])
+
+  const handleSaveModel = useCallback(async () => {
+    setBusy('save')
+    setError(null)
+    try {
+      await ipc.providers.updateModel({ id: provider.id, model })
+      onChanged()
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(null)
+    }
+  }, [provider.id, model, onChanged, onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[var(--ink)]/30 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[460px] rounded-[12px] bg-[var(--paper)] border border-[var(--rule)] shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-[var(--rule)]">
+          <h3
+            className="font-display text-[18px] text-[var(--ink)]"
+            style={{ fontWeight: 500 }}
+          >
+            配置 {provider.name}
+          </h3>
+          <p className="font-serif-zh italic text-[12px] text-[var(--ink-faint)] mt-1">
+            使用 ChatGPT Plus/Pro 订阅额度，登录授权，无需 API key
+          </p>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {connected === null ? (
+            <div className="text-[var(--ink-faint)] text-sm">加载中…</div>
+          ) : connected ? (
+            <>
+              <div className="flex items-center gap-2 text-[13px] text-[var(--ink)]">
+                <Check className="w-4 h-4 text-[var(--accent)]" />
+                已登录
+                {accountId && (
+                  <span className="font-mono text-[11px] text-[var(--ink-faint)] truncate">
+                    {accountId}
+                  </span>
+                )}
+              </div>
+              <Field label="Model">
+                <Select
+                  value={model}
+                  onChange={(v) => {
+                    setModel(v)
+                    if (error) setError(null)
+                  }}
+                  options={provider.models.map((m) => ({
+                    value: m.id,
+                    label: m.label ?? m.id,
+                    hint: formatContext(m.contextTokens)
+                  }))}
+                  ariaLabel="选择模型"
+                />
+              </Field>
+            </>
+          ) : login ? (
+            <div className="space-y-3">
+              <div className="text-center">
+                <div className="font-mono text-[24px] tracking-[0.2em] text-[var(--ink)] py-2">
+                  {login.userCode}
+                </div>
+                <p className="font-serif-zh italic text-[12px] text-[var(--ink-faint)] leading-[1.7]">
+                  已在浏览器打开授权页面，输入上面的代码完成登录。
+                  <br />
+                  没有打开？访问{' '}
+                  <span className="font-mono not-italic text-[11px]">
+                    {login.verificationUrl}
+                  </span>
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-[12px] text-[var(--ink-soft)]">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                等待授权…
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <button
+                onClick={handleLoginStart}
+                disabled={busy !== null}
+                className="no-drag w-full px-4 py-2 rounded-md bg-[var(--accent)] text-[var(--paper)] text-[13px] font-medium hover:opacity-90 transition active:scale-[0.98] disabled:opacity-50"
+              >
+                {busy === 'start' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin inline" />
+                ) : (
+                  '登录 ChatGPT'
+                )}
+              </button>
+              {opencodeFound && (
+                <button
+                  onClick={handleImport}
+                  disabled={busy !== null}
+                  className="no-drag w-full px-4 py-2 rounded-md text-[13px] text-[var(--ink-soft)] border border-[var(--rule)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition disabled:opacity-50"
+                >
+                  {busy === 'import' ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin inline" />
+                  ) : (
+                    '导入 opencode 已有登录'
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="font-serif-zh italic text-[12px] text-[var(--accent)]">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-[var(--paper-dim)] border-t border-[var(--rule)] flex items-center gap-2">
+          {connected && (
+            <button
+              onClick={handleLogout}
+              disabled={busy !== null}
+              className="no-drag flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] text-[var(--ink-faint)] hover:text-[var(--accent)] hover:bg-[var(--paper-soft)] transition disabled:opacity-40"
+            >
+              {busy === 'logout' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+              退出登录
+            </button>
+          )}
+
+          <div className="flex-1" />
+
+          <button
+            onClick={onClose}
+            disabled={busy !== null}
+            className="no-drag px-3 py-1.5 rounded-md text-[12px] text-[var(--ink-soft)] hover:text-[var(--ink)] hover:bg-[var(--paper-soft)] transition"
+          >
+            {connected ? '取消' : '关闭'}
+          </button>
+          {connected && (
+            <button
+              onClick={handleSaveModel}
+              disabled={busy !== null}
+              className="no-drag px-4 py-1.5 rounded-md bg-[var(--accent)] text-[var(--paper)] text-[12.5px] font-medium hover:opacity-90 transition active:scale-[0.98] disabled:opacity-50"
+            >
+              {busy === 'save' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin inline" />
+              ) : (
+                '保存'
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

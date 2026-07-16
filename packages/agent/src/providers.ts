@@ -1,9 +1,11 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
+import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 import type { CredentialProvider } from './credentials'
+import { createCodexFetch } from './codex-fetch'
 
-export type ProviderKind = 'anthropic' | 'openai-compatible'
+export type ProviderKind = 'anthropic' | 'openai-compatible' | 'openai-codex'
 
 export type ProviderModel = {
   /** Exact API model id passed to the provider's SDK. */
@@ -31,6 +33,36 @@ export type ProviderProfile = {
 }
 
 const KIMI_262K = 262_144
+// 上下文窗口来自 models.dev（2026-07）：5.4+ 主线 1.05M，codex/mini 线
+// 400K，codex-spark 128K。
+const GPT_1M = 1_050_000
+const GPT_400K = 400_000
+const GPT_128K = 128_000
+
+export const CODEX_MODELS: ProviderModel[] = [
+  { id: 'gpt-5.6', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-luna-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-sol-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.6-terra-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.5', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.5-pro', contextTokens: GPT_1M },
+  { id: 'gpt-5.4', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-fast', contextTokens: GPT_1M },
+  { id: 'gpt-5.4-mini', contextTokens: GPT_400K },
+  { id: 'gpt-5.4-mini-fast', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex', contextTokens: GPT_400K },
+  { id: 'gpt-5.3-codex-spark', contextTokens: GPT_128K },
+  { id: 'gpt-5.2', contextTokens: GPT_400K }
+]
 
 /**
  * Minimal mirror of `renderer/src/lib/providers.ts` PROVIDERS. Keep in sync
@@ -53,6 +85,19 @@ export const PROFILES: Record<string, ProviderProfile> = {
     baseURL: 'https://api.openai.com/v1',
     models: [],
     defaultModelId: ''
+  },
+  // ChatGPT 订阅（OAuth 登录，非 API key）。baseURL 仍写标准 OpenAI 地址：
+  // AI SDK 往这里发请求，createCodexFetch 在传输层改写到
+  // chatgpt.com/backend-api/codex/responses 并注入订阅鉴权。
+  'openai-codex': {
+    id: 'openai-codex',
+    kind: 'openai-codex',
+    baseURL: 'https://api.openai.com/v1',
+    // 订阅端点接受的完整模型集，镜像自 `opencode models` 的 openai/*
+    // 输出（2026-07）。上下文窗口对照 models.dev；-fast/-pro 变体按基础
+    // 型号取值。列表过期时重跑 `opencode models` 对齐即可。
+    models: CODEX_MODELS,
+    defaultModelId: 'gpt-5.6'
   },
   // Kimi Coding Plan endpoint speaks the Anthropic protocol and allowlists
   // clients by SDK shape — OpenAI-compatible calls are rejected with
@@ -124,6 +169,30 @@ export async function makeModel(
   const profile = PROFILES[providerId]
   if (!profile) {
     throw new Error(`unknown provider: ${providerId}`)
+  }
+  if (profile.kind === 'openai-codex') {
+    // Subscription login, no API key. The host supplies auto-refreshed
+    // oauth tokens; the dummy apiKey only satisfies the SDK constructor —
+    // real auth is injected per-request by createCodexFetch.
+    const getCodexTokens = credentials.getCodexTokens?.bind(credentials)
+    if (!getCodexTokens) {
+      throw new Error(`provider "${providerId}" 需要 ChatGPT 订阅登录，当前环境不支持`)
+    }
+    const codexFetch = createCodexFetch(async () => {
+      const tokens = await getCodexTokens(providerId)
+      if (!tokens) {
+        throw new Error('ChatGPT 订阅未登录 — 在设置 → 大模型供应商里登录 OpenAI')
+      }
+      return tokens
+    })
+    const openai = createOpenAI({
+      apiKey: 'chatgpt-subscription',
+      baseURL: profile.baseURL,
+      // FetchLike matches the standard fetch call signature; Bun's fetch
+      // type additionally declares `preconnect`, hence the cast.
+      fetch: codexFetch as typeof fetch
+    })
+    return openai.responses(modelId)
   }
   const key = await credentials.getKey(providerId)
   if (!key) {

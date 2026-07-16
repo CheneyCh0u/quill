@@ -9,9 +9,17 @@ import {
 } from './providers'
 
 describe('PROVIDERS registry', () => {
-  it('contains the 6 built-in providers', () => {
+  it('contains the 7 built-in providers', () => {
     const ids = PROVIDERS.map((p) => p.id).sort()
-    expect(ids).toEqual(['anthropic', 'deepseek', 'glm', 'kimi', 'openai', 'qwen'])
+    expect(ids).toEqual([
+      'anthropic',
+      'deepseek',
+      'glm',
+      'kimi',
+      'openai',
+      'openai-codex',
+      'qwen'
+    ])
   })
 
   it('every provider has baseURL, name, and models[] (possibly empty)', () => {
@@ -112,6 +120,39 @@ describe('isKnownProvider', () => {
   it('returns false for unknown ids', () => {
     expect(isKnownProvider('foo')).toBe(false)
     expect(isKnownProvider('')).toBe(false)
+  })
+})
+
+describe('registry sync with @quill/agent PROFILES', () => {
+  it('every renderer provider matches the agent profile (models / default / baseURL / kind)', async () => {
+    const { listSupportedProviders } = await import('@quill/agent')
+    const profiles = new Map(listSupportedProviders().map((p) => [p.id, p]))
+    for (const p of PROVIDERS) {
+      const agent = profiles.get(p.id)
+      expect(agent).toBeDefined()
+      expect(agent!.kind).toBe(p.kind)
+      expect(agent!.baseURL).toBe(p.baseURL)
+      expect(agent!.defaultModelId).toBe(p.defaultModelId)
+      expect(agent!.models.map((m) => [m.id, m.contextTokens])).toEqual(
+        p.models.map((m) => [m.id, m.contextTokens])
+      )
+    }
+  })
+})
+
+describe('openai-codex (ChatGPT subscription)', () => {
+  it('is an oauth provider with a usable model catalog', () => {
+    const codex = getProviderProfile('openai-codex')!
+    expect(codex.auth).toBe('oauth')
+    expect(codex.kind).toBe('openai-codex')
+    expect(codex.models.length).toBeGreaterThan(0)
+    expect(codex.models.some((m) => m.id === codex.defaultModelId)).toBe(true)
+  })
+
+  it('is rejected by the api-key validator — it configures via login instead', () => {
+    const r = validateProviderConfig({ id: 'openai-codex', key: 'sk-x', model: 'gpt-5.5' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/登录/)
   })
 })
 
