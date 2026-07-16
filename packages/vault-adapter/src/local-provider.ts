@@ -9,6 +9,7 @@ import type { VaultProvider } from './types'
  */
 export interface QuillFsBridge {
   readFile(path: string): Promise<string>
+  readFileBinary(path: string): Promise<Uint8Array>
   writeFile(path: string, content: string): Promise<void>
   rename(oldPath: string, newPath: string): Promise<void>
   listDir(path: string): Promise<FileNode[]>
@@ -25,6 +26,10 @@ export class LocalProvider implements VaultProvider {
 
   read(path: string): Promise<string> {
     return this.fs.readFile(path)
+  }
+
+  readBinary(path: string): Promise<Uint8Array> {
+    return this.fs.readFileBinary(path)
   }
 
   write(path: string, content: string): Promise<void> {

@@ -129,3 +129,34 @@ describe('RemoteVault credentials mode', () => {
     expect(seen?.credentials).toBe('include')
   })
 })
+
+describe('readBinary', () => {
+  test('fetches the resource endpoint with the workspace prefix and returns bytes', async () => {
+    const seen: string[] = []
+    stubFetch((url) => {
+      seen.push(url)
+      return new Response(new Uint8Array([9, 8, 7]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' }
+      })
+    })
+    try {
+      const vault = new RemoteVault({ baseUrl: '', rootPath: 'ws1' })
+      const bytes = await vault.readBinary('img/pic.png')
+      expect(Array.from(bytes)).toEqual([9, 8, 7])
+      expect(seen[0]).toBe('/api/vault/resource/ws1/img/pic.png')
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('maps 401 to UnauthorizedError', async () => {
+    stubFetch(() => new Response('', { status: 401 }))
+    try {
+      const vault = new RemoteVault({ baseUrl: '' })
+      await expect(vault.readBinary('pic.png')).rejects.toBeInstanceOf(UnauthorizedError)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+})

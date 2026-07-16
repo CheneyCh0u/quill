@@ -42,7 +42,8 @@ function toFileNode(e: ServerEntry): FileNode {
     path: e.path,
     isDirectory: false,
     isMarkdown: info.isMarkdown,
-    isText: info.isText
+    isText: info.isText,
+    isViewable: info.viewable !== null
   }
 }
 
@@ -171,6 +172,20 @@ export class RemoteVault implements VaultProvider {
     if (res.status === 404) throw new Error(`file not found: ${path}`)
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     return res.text()
+  }
+
+  async readBinary(path: string): Promise<Uint8Array> {
+    const res = await fetch(
+      this.url(`/api/vault/resource/${encodeURI(this.full(path))}`),
+      await this.withAuth()
+    )
+    if (res.status === 401) {
+      this.onUnauthorized()
+      throw new UnauthorizedError()
+    }
+    if (res.status === 404) throw new Error(`file not found: ${path}`)
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    return new Uint8Array(await res.arrayBuffer())
   }
 
   async write(path: string, content: string): Promise<void> {

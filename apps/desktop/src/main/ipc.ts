@@ -113,7 +113,8 @@ async function scanDir(path: string): Promise<FileNode[]> {
         path: childPath,
         isDirectory: false,
         isMarkdown: info.isMarkdown,
-        isText: info.isText
+        isText: info.isText,
+        isViewable: info.viewable !== null
       })
     }
   }
@@ -172,6 +173,12 @@ export function registerIpc(): void {
 
   ipcMain.handle('fs:readFile', async (_evt, path: string) => {
     return await fs.readFile(path, 'utf-8')
+  })
+
+  // Raw bytes for the view-only formats (images / pdf, #132). Arrives in
+  // the renderer as a Uint8Array; the viewer wraps it in a Blob URL.
+  ipcMain.handle('fs:readFileBinary', async (_evt, path: string) => {
+    return await fs.readFile(path)
   })
 
   ipcMain.handle('fs:writeFile', async (_evt, path: string, content: string) => {

@@ -168,7 +168,8 @@ export function PaneHeader() {
           {isMarkdownFile && (
             <ModeSwitcher value={state.viewMode} onChange={setViewMode} />
           )}
-          <ExportMenu />
+          {/* 只读查看的文件（图片/PDF）没有可导出的 markdown。 */}
+          {!(cur.path && getFileType(cur.path).viewable) && <ExportMenu />}
         </>
       )}
     </div>

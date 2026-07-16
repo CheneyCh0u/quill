@@ -6,6 +6,7 @@ import { AgentPanel } from '../components/AgentPanel'
 import { DownloadMenu } from '../components/DownloadMenu'
 import { Editor } from '../components/Editor'
 import { FileTree, type FileTreeHandle } from '../components/FileTree'
+import { FileViewer } from '../components/FileViewer'
 import { ModeSwitcher, type ViewMode } from '../components/ModeSwitcher'
 import { Outline, OutlineSheetButton } from '../components/Outline'
 import { Preview } from '../components/Preview'
@@ -110,6 +111,8 @@ export function Vault(): JSX.Element {
   })
 
   const dirty = buffer !== source
+  // View-only formats (#132) bypass text loading and the editor entirely.
+  const viewableKind = selected ? getFileType(selected.path).viewable : null
 
   // Workspace switch tears the whole page context down: file selection,
   // buffers, and the agent conversation (its permission scope changed).
@@ -160,6 +163,14 @@ export function Vault(): JSX.Element {
   // Load source whenever the selected file changes.
   useEffect(() => {
     if (!selected) return
+    // Viewable binaries: FileViewer 自己拉字节，文本通道读出来只会是乱码。
+    if (getFileType(selected.path).viewable) {
+      setSource('')
+      setBuffer('')
+      setLoadErr(null)
+      setSave('idle')
+      return
+    }
     let cancelled = false
     setSave('idle')
     vault
@@ -341,7 +352,7 @@ export function Vault(): JSX.Element {
               </span>
             )}
           </span>
-          {selected && (
+          {selected && !viewableKind && (
             <>
               <SaveStatusIndicator status={save} dirty={dirty} onSave={handleSave} />
               {/* Markdown-specific UI: preview/edit toggle, outline button
@@ -395,7 +406,10 @@ export function Vault(): JSX.Element {
                 在左侧选择一个文件
               </div>
             )}
-            {selected && !loadErr && (
+            {selected && !loadErr && viewableKind && (
+              <FileViewer vault={vault} path={selected.path} kind={viewableKind} />
+            )}
+            {selected && !loadErr && !viewableKind && (
               mode === 'edit' ? (
                 <Editor
                   value={buffer}

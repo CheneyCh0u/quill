@@ -146,6 +146,8 @@ const api = {
   },
   fs: {
     readFile: (path: string): Promise<string> => ipcRenderer.invoke('fs:readFile', path),
+    readFileBinary: (path: string): Promise<Uint8Array> =>
+      ipcRenderer.invoke('fs:readFileBinary', path),
     writeFile: (path: string, content: string): Promise<void> =>
       ipcRenderer.invoke('fs:writeFile', path, content),
     rename: (oldPath: string, newPath: string): Promise<void> =>

@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode
 } from 'react'
+import { getFileType } from '@quill/shared-types'
 import type { FileNode, ViewMode, Workspace as CloudWorkspace } from '../types'
 import { ipc, switchToLocal, switchToRemote } from '../lib/ipc'
 import {
@@ -404,7 +405,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const openFileAt = useCallback(async (path: string) => {
-    const content = await ipc.vault.read(path)
+    // View-only formats (#132): the viewer reads bytes itself — pulling a
+    // multi-MB binary through the text channel would just produce mojibake.
+    const viewable = getFileType(path).viewable !== null
+    const content = viewable ? '' : await ipc.vault.read(path)
     dispatch({
       type: 'OPEN_FILE',
       path,

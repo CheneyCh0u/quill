@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { getFileType } from '@quill/shared-types'
 import { PaneHeader } from './PaneHeader'
+import { FileViewer } from './FileViewer'
 import { Editor } from './Editor'
 import { Preview } from './Preview'
 import { OutlineRail } from './OutlineRail'
@@ -26,6 +27,8 @@ export function RightPane() {
   // and outline only make sense for markdown.
   const isMarkdownFile = !cur?.path || getFileType(cur.path).isMarkdown
   const effectiveViewMode = isMarkdownFile ? state.viewMode : 'edit'
+  // View-only formats (#132) bypass the whole editor/preview machinery.
+  const viewableKind = cur?.path ? getFileType(cur.path).viewable : null
 
   const [editorView, setEditorView] = useState<EditorView | null>(null)
   const [previewScrollEl, setPreviewScrollEl] = useState<HTMLDivElement | null>(null)
@@ -34,7 +37,7 @@ export function RightPane() {
   // Global Cmd+F / Cmd+R triggers. Captured at window level so they work
   // regardless of which child currently has focus (editor, sidebar, etc).
   useEffect(() => {
-    if (!cur) return
+    if (!cur || viewableKind) return
     const handler = (e: KeyboardEvent): void => {
       if (!(e.metaKey || e.ctrlKey)) return
       const k = e.key.toLowerCase()
@@ -63,7 +66,7 @@ export function RightPane() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [cur, editorView, state.viewMode, setViewMode])
+  }, [cur, viewableKind, editorView, state.viewMode, setViewMode])
 
   // Switching files closes any open search panel — its query / matches refer
   // to the old document, so re-opening on the new one is correct.
@@ -81,7 +84,13 @@ export function RightPane() {
         </div>
       )}
 
-      {cur && (
+      {cur && viewableKind && cur.path && (
+        <div className="flex-1 min-h-0">
+          <FileViewer path={cur.path} kind={viewableKind} />
+        </div>
+      )}
+
+      {cur && !viewableKind && (
         <>
           <div className="flex-1 flex min-h-0">
             {effectiveViewMode !== 'preview' && (

@@ -328,7 +328,7 @@ export const FileTree = forwardRef<FileTreeHandle, TreeProps>(function FileTree(
   function renderRow(node: FileNode, depth: number): JSX.Element {
     const isSelected = node.path === selectedPath
     const isExpanded = !!expanded[node.path]
-    const isOpenable = node.isText
+    const isOpenable = node.isText || node.isViewable
     const isRenaming = renamingPath === node.path
     const showActions = actionsForPath === node.path
     return (

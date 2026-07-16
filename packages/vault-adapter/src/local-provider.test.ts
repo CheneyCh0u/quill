@@ -11,6 +11,10 @@ function makeBridge(): {
       calls.push({ method: 'readFile', args: [path] })
       return 'content'
     },
+    readFileBinary: async (path) => {
+      calls.push({ method: 'readFileBinary', args: [path] })
+      return new Uint8Array([1, 2, 3])
+    },
     writeFile: async (path, content) => {
       calls.push({ method: 'writeFile', args: [path, content] })
     },
@@ -118,5 +122,15 @@ describe('LocalProvider', () => {
     const provider = new LocalProvider(bridge)
     await provider.deleteDir('/x/sub', true)
     expect(calls).toEqual([{ method: 'deleteDir', args: ['/x/sub', true] }])
+  })
+})
+
+describe('readBinary', () => {
+  test('passes through to the bridge and returns raw bytes', async () => {
+    const { bridge, calls } = makeBridge()
+    const vault = new LocalProvider(bridge)
+    const bytes = await vault.readBinary('/ws/pic.png')
+    expect(Array.from(bytes)).toEqual([1, 2, 3])
+    expect(calls.at(-1)).toEqual({ method: 'readFileBinary', args: ['/ws/pic.png'] })
   })
 })

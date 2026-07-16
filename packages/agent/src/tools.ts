@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { promises as fs } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
 import type { Dirent } from 'node:fs'
-import { isSupportedTextFile } from '@quill/shared-types'
+import { isSupportedTextFile, isViewableFile } from '@quill/shared-types'
 import { inScope, type Scope } from './scope'
 import type { ApprovalPayload, ApprovalResponse } from './approvals'
 import { checkUrl } from './url-guard'
@@ -109,6 +109,12 @@ export function makeTools(
       execute: async ({ path }) => {
         try {
           const abs = resolveInScope(scope, path)
+          if (isViewableFile(abs)) {
+            return {
+              ok: false,
+              error: `"${path}" is a binary viewable file (image/pdf) — cannot be read as text`
+            }
+          }
           const content = await fs.readFile(abs, 'utf-8')
           return { ok: true, path: abs, content }
         } catch (err) {

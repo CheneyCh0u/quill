@@ -21,13 +21,22 @@ export type FileLanguage =
   | 'r'
   | 'diff'
 
+export type ViewableKind = 'image' | 'pdf'
+
 export type FileTypeInfo = {
   isText: boolean
   isMarkdown: boolean
   language: FileLanguage | null
+  /** View-only formats the app can display but never edit. null for text
+   *  files (editable) and unknown binaries (not openable at all). */
+  viewable: ViewableKind | null
 }
 
 const MARKDOWN_EXT = new Set(['md', 'markdown', 'mdown', 'mkd'])
+
+// View-only formats. svg is deliberately absent — it's editable xml and
+// stays on the text/editor path.
+const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'ico'])
 
 const LANG_BY_EXT: Record<string, FileLanguage> = {
   js: 'javascript',
@@ -150,26 +159,38 @@ export function getFileType(path: string): FileTypeInfo {
   const ext = extOf(name)
 
   if (ext && MARKDOWN_EXT.has(ext)) {
-    return { isText: true, isMarkdown: true, language: 'markdown' }
+    return { isText: true, isMarkdown: true, language: 'markdown', viewable: null }
   }
 
   if (ext && ext in LANG_BY_EXT) {
-    return { isText: true, isMarkdown: false, language: LANG_BY_EXT[ext] }
+    return { isText: true, isMarkdown: false, language: LANG_BY_EXT[ext], viewable: null }
   }
 
   if (ext && PLAIN_TEXT_EXT.has(ext)) {
-    return { isText: true, isMarkdown: false, language: null }
+    return { isText: true, isMarkdown: false, language: null, viewable: null }
   }
 
   if (!ext && PLAIN_TEXT_FILENAMES.has(name.toLowerCase())) {
-    return { isText: true, isMarkdown: false, language: null }
+    return { isText: true, isMarkdown: false, language: null, viewable: null }
   }
 
-  return { isText: false, isMarkdown: false, language: null }
+  if (ext && IMAGE_EXT.has(ext)) {
+    return { isText: false, isMarkdown: false, language: null, viewable: 'image' }
+  }
+
+  if (ext === 'pdf') {
+    return { isText: false, isMarkdown: false, language: null, viewable: 'pdf' }
+  }
+
+  return { isText: false, isMarkdown: false, language: null, viewable: null }
 }
 
 export function isSupportedTextFile(path: string): boolean {
   return getFileType(path).isText
+}
+
+export function isViewableFile(path: string): boolean {
+  return getFileType(path).viewable !== null
 }
 
 /** All supported extensions (no leading dot) — used for dialog filters etc. */

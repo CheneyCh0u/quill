@@ -133,4 +133,26 @@ describe('getFileType', () => {
     expect(getFileType('/foo/bar/baz.json').language).toBe('json')
     expect(getFileType('C:\\repo\\file.ts').language).toBe('javascript')
   })
+
+  it('classifies images and pdf as viewable (view-only, not text)', () => {
+    for (const name of ['a.png', 'b.JPG', 'c.jpeg', 'd.gif', 'e.webp', 'f.bmp', 'g.avif', 'h.ico']) {
+      const info = getFileType(name)
+      expect(info.viewable).toBe('image')
+      expect(info.isText).toBe(false)
+    }
+    expect(getFileType('paper.pdf').viewable).toBe('pdf')
+    expect(getFileType('paper.PDF').viewable).toBe('pdf')
+  })
+
+  it('keeps svg as editable text (xml), not viewable-image', () => {
+    const info = getFileType('icon.svg')
+    expect(info.isText).toBe(true)
+    expect(info.viewable).toBeNull()
+  })
+
+  it('text files and unknown binaries have viewable: null', () => {
+    expect(getFileType('note.md').viewable).toBeNull()
+    expect(getFileType('archive.zip').viewable).toBeNull()
+    expect(getFileType('video.mp4').viewable).toBeNull()
+  })
 })
