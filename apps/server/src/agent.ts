@@ -3,8 +3,13 @@ import { createBunWebSocket } from 'hono/bun'
 import { z } from 'zod'
 import {
   AgentRuntime,
+  CODEX_PROVIDER_ID,
+  createCodexTokenSource,
   listSupportedProviders,
-  type CredentialProvider
+  pollCodexDeviceAuth,
+  startCodexDeviceAuth,
+  type CredentialProvider,
+  type DeviceAuthPending
 } from '@quill/agent'
 import type {
   AgentEvent,
@@ -14,10 +19,17 @@ import type {
 } from '@quill/shared-types'
 import { requireSession } from './auth'
 import type { ProvidersStore } from './providers-store'
+import type { ServerCodexStore } from './codex-store'
 
 export type AgentDeps = {
   store: ProvidersStore
   sessionSecret: string
+  /** ChatGPT subscription token storage. Omitted = subscription login
+   *  disabled on this host (codex routes 501, catalog hides the provider). */
+  codexStore?: ServerCodexStore
+  /** OAuth HTTP override for tests — device flow + token refresh go
+   *  through this instead of global fetch. */
+  codexFetch?: (input: string | URL, init?: RequestInit) => Promise<Response>
   /** The server's vault root. Always overrides client-supplied scope.root —
    *  the client must not get to point the agent at arbitrary fs paths. */
   vaultRoot: string
@@ -45,9 +57,18 @@ export function createAgentRoutes(
   // CredentialProvider reads through the store on each call so newly-added
   // keys take effect immediately — no need to restart the runtime when the
   // user saves a new provider in the settings UI.
+  const codexStore = deps.codexStore
+  const codexTokenSource = codexStore
+    ? createCodexTokenSource(codexStore, deps.codexFetch)
+    : null
   const credentials: CredentialProvider = {
     async getKey(providerId) {
       return deps.store.getKey(providerId)
+    },
+    async getCodexTokens(providerId) {
+      if (!codexStore || !codexTokenSource || providerId !== CODEX_PROVIDER_ID) return null
+      if (!(await codexStore.load())) return null
+      return codexTokenSource()
     }
   }
   const runtime = new AgentRuntime({ credentials })
@@ -63,9 +84,9 @@ export function createAgentRoutes(
   app.get('/catalog', requireSession(deps.sessionSecret), (c) => {
     return c.json(
       listSupportedProviders()
-        // oauth 类 provider（ChatGPT 订阅）目前只有桌面端能登录，
-        // server 无处存订阅 token — 不进 web catalog。
-        .filter((p) => p.models.length > 0 && p.kind !== 'openai-codex')
+        // oauth 类 provider（ChatGPT 订阅）只在宿主配置了 token 存储时
+        // 才进 catalog — 否则 web 端会渲染一个登不上的入口。
+        .filter((p) => p.models.length > 0 && (p.kind !== 'openai-codex' || !!codexStore))
         .map((p) => ({
           id: p.id,
           kind: p.kind,
@@ -78,7 +99,7 @@ export function createAgentRoutes(
 
   // What the user has configured. AgentPanel uses this list to decide
   // which model to pick. Stripped of api_key.
-  app.get('/providers', requireSession(deps.sessionSecret), (c) => {
+  app.get('/providers', requireSession(deps.sessionSecret), async (c) => {
     const supported = new Map(listSupportedProviders().map((p) => [p.id, p]))
     const out: AgentProviderInfo[] = deps.store.listPublic().map((s) => {
       const catalog = supported.get(s.id)
@@ -88,6 +109,17 @@ export function createAgentRoutes(
       const models = Array.from(new Set([s.model, ...catalogIds])).filter(Boolean)
       return { id: s.id, models }
     })
+    // The codex provider is "configured" when subscription tokens exist —
+    // it has no ProvidersStore entry (no api_key), so append it here.
+    if (codexStore && (await codexStore.load())) {
+      const catalog = supported.get(CODEX_PROVIDER_ID)
+      const model = (await codexStore.getModel()) || catalog?.defaultModelId || ''
+      const catalogIds = catalog ? catalog.models.map((m) => m.id) : []
+      out.push({
+        id: CODEX_PROVIDER_ID,
+        models: Array.from(new Set([model, ...catalogIds])).filter(Boolean)
+      })
+    }
     return c.json(out)
   })
 
@@ -124,6 +156,68 @@ export function createAgentRoutes(
 
   app.delete('/providers/:id', requireSession(deps.sessionSecret), async (c) => {
     await deps.store.remove(c.req.param('id'))
+    return c.json({ ok: true })
+  })
+
+  // -------- ChatGPT subscription login (openai-codex) -------------------
+  // Same device-code flow as desktop, driven over REST: start returns the
+  // user code + verification URL, the web client polls until the browser
+  // authorization completes. Tokens stay server-side in codexStore.
+  const codexProfile = listSupportedProviders().find((p) => p.id === CODEX_PROVIDER_ID)
+  let codexPending: DeviceAuthPending | null = null
+  const NOT_ENABLED = { error: 'subscription login not enabled on this server' }
+
+  app.get('/codex', requireSession(deps.sessionSecret), async (c) => {
+    if (!codexStore) return c.json(NOT_ENABLED, 501)
+    const tokens = await codexStore.load()
+    const model = (await codexStore.getModel()) || codexProfile?.defaultModelId || ''
+    return c.json({ connected: tokens !== null, accountId: tokens?.accountId ?? null, model })
+  })
+
+  app.post('/codex/login/start', requireSession(deps.sessionSecret), async (c) => {
+    if (!codexStore) return c.json(NOT_ENABLED, 501)
+    codexPending = await startCodexDeviceAuth(deps.codexFetch)
+    return c.json({
+      userCode: codexPending.userCode,
+      verificationUrl: codexPending.verificationUrl,
+      intervalMs: codexPending.intervalMs
+    })
+  })
+
+  app.post('/codex/login/poll', requireSession(deps.sessionSecret), async (c) => {
+    if (!codexStore) return c.json(NOT_ENABLED, 501)
+    if (!codexPending) return c.json({ error: '没有进行中的登录流程' }, 400)
+    const result = await pollCodexDeviceAuth(codexPending, deps.codexFetch)
+    if (result.status === 'pending') return c.json({ status: 'pending' })
+    codexPending = null
+    await codexStore.save(result.tokens)
+    // Keep a previously-chosen model across re-logins; default otherwise.
+    if (!(await codexStore.getModel()) && codexProfile) {
+      await codexStore.setModel(codexProfile.defaultModelId)
+    }
+    return c.json({ status: 'connected', accountId: result.tokens.accountId })
+  })
+
+  app.post('/codex/login/cancel', requireSession(deps.sessionSecret), (c) => {
+    codexPending = null
+    return c.json({ ok: true })
+  })
+
+  app.post('/codex/model', requireSession(deps.sessionSecret), async (c) => {
+    if (!codexStore) return c.json(NOT_ENABLED, 501)
+    const body = (await c.req.json().catch(() => null)) as { model?: unknown } | null
+    const model = typeof body?.model === 'string' ? body.model : ''
+    if (!codexProfile?.models.some((m) => m.id === model)) {
+      return c.json({ error: `unknown model for openai-codex: ${model}` }, 400)
+    }
+    await codexStore.setModel(model)
+    return c.json({ ok: true })
+  })
+
+  app.delete('/codex', requireSession(deps.sessionSecret), async (c) => {
+    if (!codexStore) return c.json(NOT_ENABLED, 501)
+    codexPending = null
+    await codexStore.clear()
     return c.json({ ok: true })
   })
 
