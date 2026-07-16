@@ -17,6 +17,20 @@ export type SelectOption = {
   hint?: string
 }
 
+/**
+ * Whether a captured scroll event should close the popover. Scrolls that
+ * originate *inside* the popover are the user browsing a long option list
+ * (e.g. the 22-model codex catalog) and must not close it; anything else
+ * is an ancestor container scrolling underneath us — close to avoid a
+ * detached popover.
+ */
+export function scrollShouldClose(
+  popoverEl: { contains(node: unknown): boolean } | null,
+  target: unknown
+): boolean {
+  return !popoverEl || !target || !popoverEl.contains(target)
+}
+
 type Props = {
   value: string
   onChange: (value: string) => void
@@ -56,11 +70,15 @@ export function Select({
 
   // Recompute position when opening, and on viewport / scroll changes
   // while open. Close on scroll of an ancestor container — keeps things
-  // simple vs. tracking every parent scroll.
+  // simple vs. tracking every parent scroll. Scrolling the option list
+  // itself must NOT close (capture-phase listener sees those too).
   useLayoutEffect(() => {
     if (!open) return
     reposition()
-    const onScroll = (): void => setOpen(false)
+    const onScroll = (e: Event): void => {
+      if (!scrollShouldClose(popRef.current, e.target)) return
+      setOpen(false)
+    }
     const onResize = (): void => reposition()
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', onResize)
