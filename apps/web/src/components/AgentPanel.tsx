@@ -211,15 +211,7 @@ function TurnView({
         <span className="text-[var(--ink-faint)]">› </span>
         {turn.prompt}
       </div>
-      {turn.toolCalls.map((tc) => (
-        <div
-          key={tc.toolCallId}
-          className="text-xs font-mono bg-[var(--paper-soft)] border border-[var(--rule-soft)] rounded px-2 py-1 text-[var(--ink-soft)]"
-        >
-          <span className="text-[var(--accent)]">{tc.name}</span>(
-          <span className="text-[var(--ink-faint)]">{summarizeArgs(tc.args)}</span>)
-        </div>
-      ))}
+      <ToolCallsView toolCalls={turn.toolCalls} running={turn.status === 'running'} />
       {[...turn.pendingApprovals.entries()].map(([id, payload]) => (
         <ApprovalCard
           key={id}
@@ -422,6 +414,58 @@ function TokenBudget({ used, window: total }: { used: number; window: number }):
     >
       {formatContextWindow(used)} / {formatContextWindow(total)}
     </span>
+  )
+}
+
+/**
+ * 工具调用折叠视图（#125）：已完成的归组进「N 个工具调用」，默认收起、
+ * 点开逐条查看；运行中只把最新一条摊出来（带 spinner）——「每次只显示
+ * 正在运行的命令」。
+ */
+function ToolCallsView({
+  toolCalls,
+  running
+}: {
+  toolCalls: { toolCallId: string; name: string; args: unknown }[]
+  running: boolean
+}): JSX.Element | null {
+  const [open, setOpen] = useState(false)
+  if (toolCalls.length === 0) return null
+  const current = running ? toolCalls[toolCalls.length - 1] : null
+  const done = current ? toolCalls.slice(0, -1) : toolCalls
+  return (
+    <div className="space-y-1">
+      {done.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-xs text-[var(--ink-faint)] hover:text-[var(--ink)] transition"
+          >
+            {open ? '▾' : '▸'} {done.length} 个工具调用
+          </button>
+          {open &&
+            done.map((tc) => (
+              <div
+                key={tc.toolCallId}
+                className="mt-1 text-xs font-mono bg-[var(--paper-soft)] border border-[var(--rule-soft)] rounded px-2 py-1 text-[var(--ink-soft)]"
+              >
+                <span className="text-[var(--accent)]">{tc.name}</span>(
+                <span className="text-[var(--ink-faint)]">{summarizeArgs(tc.args)}</span>)
+              </div>
+            ))}
+        </div>
+      )}
+      {current && (
+        <div className="flex items-center gap-2 text-xs font-mono bg-[var(--paper-soft)] border border-[var(--rule-soft)] rounded px-2 py-1 text-[var(--ink-soft)]">
+          <span className="inline-block w-3 h-3 border border-[var(--accent)] border-t-transparent rounded-full animate-spin shrink-0" />
+          <span>
+            <span className="text-[var(--accent)]">{current.name}</span>(
+            <span className="text-[var(--ink-faint)]">{summarizeArgs(current.args)}</span>)
+          </span>
+        </div>
+      )}
+    </div>
   )
 }
 
