@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
+  codexApi,
   providersApi,
   type CatalogEntry,
+  type CodexLoginStart,
   type ConfiguredProvider
 } from '../lib/providers-api'
 import { UnauthorizedError } from '@quill/vault-adapter'
@@ -10,6 +12,7 @@ import { UnauthorizedError } from '@quill/vault-adapter'
 const PROVIDER_LABELS: Record<string, string> = {
   kimi: 'Kimi · Coding Plan',
   openai: 'OpenAI',
+  'openai-codex': 'OpenAI · ChatGPT 订阅',
   anthropic: 'Anthropic',
   deepseek: 'DeepSeek',
   glm: '智谱 GLM',
@@ -133,17 +136,244 @@ export function Settings(): JSX.Element {
         </div>
       </main>
 
-      {modal && (
-        <ProviderModal
-          provider={modal.provider}
-          existing={configuredMap.get(modal.provider.id) ?? null}
-          onClose={() => setModal(null)}
-          onSaved={() => {
-            setModal(null)
-            void reload()
-          }}
-        />
-      )}
+      {modal &&
+        (modal.provider.kind === 'openai-codex' ? (
+          <CodexModal
+            provider={modal.provider}
+            onClose={() => setModal(null)}
+            onChanged={() => void reload()}
+          />
+        ) : (
+          <ProviderModal
+            provider={modal.provider}
+            existing={configuredMap.get(modal.provider.id) ?? null}
+            onClose={() => setModal(null)}
+            onSaved={() => {
+              setModal(null)
+              void reload()
+            }}
+          />
+        ))}
+    </div>
+  )
+}
+
+type CodexModalProps = {
+  provider: CatalogEntry
+  onClose: () => void
+  /** Reloads the settings list without closing the modal. */
+  onChanged: () => void
+}
+
+/**
+ * ChatGPT 订阅登录 modal（web 版）：设备码登录（展示 user code + 打开
+ * 授权页 + 轮询）、已登录后的模型选择与登出。token 全程在 server 侧，
+ * 这里只消费 /api/agent/codex/* 的状态。
+ */
+function CodexModal({ provider, onClose, onChanged }: CodexModalProps): JSX.Element {
+  const [connected, setConnected] = useState<boolean | null>(null)
+  const [accountId, setAccountId] = useState<string | null>(null)
+  const [login, setLogin] = useState<CodexLoginStart | null>(null)
+  const [model, setModel] = useState(provider.defaultModelId)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'start' | 'logout' | 'save' | null>(null)
+
+  useEffect(() => {
+    void codexApi
+      .status()
+      .then((s) => {
+        setConnected(s.connected)
+        setAccountId(s.accountId)
+        if (s.model) setModel(s.model)
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+  }, [])
+
+  // Poll the device flow while a login is pending; cancel it server-side
+  // when the modal closes mid-login.
+  useEffect(() => {
+    if (!login) return
+    let stopped = false
+    const timer = setInterval(async () => {
+      try {
+        const r = await codexApi.loginPoll()
+        if (stopped || r.status === 'pending') return
+        clearInterval(timer)
+        setLogin(null)
+        setConnected(true)
+        setAccountId(r.accountId)
+        onChanged()
+      } catch (e) {
+        if (stopped) return
+        clearInterval(timer)
+        setLogin(null)
+        setError(e instanceof Error ? e.message : '登录失败')
+      }
+    }, login.intervalMs)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      void codexApi.loginCancel()
+    }
+  }, [login, onChanged])
+
+  async function handleLoginStart(): Promise<void> {
+    setBusy('start')
+    setError(null)
+    try {
+      const pending = await codexApi.loginStart()
+      // Same user gesture as the click — popup blockers allow this.
+      window.open(pending.verificationUrl, '_blank', 'noopener')
+      setLogin(pending)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleLogout(): Promise<void> {
+    setBusy('logout')
+    setError(null)
+    try {
+      await codexApi.logout()
+      setConnected(false)
+      setAccountId(null)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleSaveModel(): Promise<void> {
+    setBusy('save')
+    setError(null)
+    try {
+      await codexApi.setModel(model)
+      onChanged()
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--ink)]/30 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-xl bg-[var(--paper)] border border-[var(--rule)] shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-[var(--rule)]">
+          <h3 className="font-display text-lg text-[var(--ink)]" style={{ fontWeight: 500 }}>
+            配置 {PROVIDER_LABELS[provider.id] ?? provider.id}
+          </h3>
+          <p className="font-serif-zh italic text-xs text-[var(--ink-faint)] mt-1">
+            使用 ChatGPT Plus/Pro 订阅额度，登录授权，无需 API key
+          </p>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          {connected === null ? (
+            <div className="text-sm text-[var(--ink-faint)]">加载中…</div>
+          ) : connected ? (
+            <>
+              <div className="flex items-center gap-2 text-sm text-[var(--ink)]">
+                <span className="text-[var(--accent)]">✓</span> 已登录
+                {accountId && (
+                  <span className="font-mono text-[11px] text-[var(--ink-faint)] truncate">
+                    {accountId}
+                  </span>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--ink)] mb-1">
+                  Model
+                </label>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="w-full px-3 py-2 rounded bg-[var(--paper-dim)] border border-[var(--rule)] text-sm outline-none focus:border-[var(--accent)]"
+                >
+                  {provider.models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label ?? m.id}
+                      {m.contextTokens > 0 ? ` · ${formatContext(m.contextTokens)}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : login ? (
+            <div className="text-center space-y-2">
+              <div className="font-mono text-2xl tracking-[0.2em] text-[var(--ink)] py-2">
+                {login.userCode}
+              </div>
+              <p className="font-serif-zh italic text-xs text-[var(--ink-faint)] leading-relaxed">
+                已在新标签页打开授权页面，输入上面的代码完成登录。
+                <br />
+                没有打开？访问{' '}
+                <a
+                  href={login.verificationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono not-italic text-[11px] text-[var(--accent)] hover:underline"
+                >
+                  {login.verificationUrl}
+                </a>
+              </p>
+              <div className="text-xs text-[var(--ink-soft)]">等待授权…</div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleLoginStart()}
+              disabled={busy !== null}
+              className="w-full px-4 py-2 rounded bg-[var(--ink)] text-[var(--paper)] text-sm font-medium hover:opacity-90 disabled:opacity-40"
+            >
+              {busy === 'start' ? '启动中…' : '登录 ChatGPT'}
+            </button>
+          )}
+
+          {error && <div className="text-xs text-[var(--accent)]">{error}</div>}
+        </div>
+        <div className="px-5 py-3 bg-[var(--paper-dim)] border-t border-[var(--rule)] flex items-center gap-2">
+          {connected && (
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              disabled={busy !== null}
+              className="px-3 py-1 text-xs text-[var(--ink-faint)] hover:text-[var(--accent)] disabled:opacity-40"
+            >
+              {busy === 'logout' ? '退出中…' : '退出登录'}
+            </button>
+          )}
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy !== null}
+            className="px-3 py-1 text-xs text-[var(--ink-soft)] hover:bg-[var(--paper-soft)] rounded"
+          >
+            {connected ? '取消' : '关闭'}
+          </button>
+          {connected && (
+            <button
+              type="button"
+              onClick={() => void handleSaveModel()}
+              disabled={busy !== null}
+              className="px-4 py-1 rounded bg-[var(--ink)] text-[var(--paper)] text-xs font-medium hover:opacity-90 disabled:opacity-40"
+            >
+              {busy === 'save' ? '保存中…' : '保存'}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
