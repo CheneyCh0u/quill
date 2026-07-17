@@ -56,8 +56,11 @@ export function EmptyState({ onConnectRemote }: EmptyStateProps) {
   }, [])
 
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center select-none px-8">
-      <div className="w-full max-w-[720px]">
+    // flex + m-auto (not justify-center): centered while the content fits,
+    // but when the recent list makes it taller than the window the top must
+    // stay reachable via scroll instead of being clipped under the titlebar.
+    <div className="h-full w-full overflow-y-auto flex select-none px-8">
+      <div className="w-full max-w-[720px] m-auto pt-16 pb-12">
         <div className="text-center mb-12">
           <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--ink-faint)] mb-3">
             a quiet place to write

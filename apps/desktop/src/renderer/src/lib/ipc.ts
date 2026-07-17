@@ -57,6 +57,7 @@ export function switchToLocal(): void {
 }
 
 export const ipc = {
+  hasInitialAction: (): boolean => window.quill.hasInitialAction,
   openFolderDialog: (): Promise<string | null> => window.quill.dialog.openFolder(),
   openFileDialog: (): Promise<string | null> => window.quill.dialog.openFile(),
   saveFileDialog: (

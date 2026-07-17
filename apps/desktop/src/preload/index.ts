@@ -41,6 +41,7 @@ export type {
 const api = {
   platform: process.platform,
   versions: process.versions,
+  hasInitialAction: process.argv.includes('--quill-has-initial'),
   dialog: {
     openFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFolder'),
     openFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFile'),

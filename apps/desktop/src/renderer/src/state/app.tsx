@@ -19,6 +19,7 @@ import {
   storeCloudWorkspaceId
 } from '../lib/cloudWorkspaces'
 import { addRecent, removeRecent } from '../lib/recent'
+import { clearLastSession, getLastSession, saveLastSession } from '../lib/session'
 import { validateRenameTarget } from '../lib/rename'
 import { joinTreePath, validateNewEntryName } from '../lib/tree-paths'
 import { usePrefs } from './prefs'
@@ -334,6 +335,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const rootName = rootPath.split(/[/\\]/).filter(Boolean).pop() ?? rootPath
     dispatch({ type: 'OPEN_WORKSPACE', kind: 'local', rootPath, rootName, tree })
     addRecent({ type: 'folder', path: rootPath, name: rootName })
+    saveLastSession({ type: 'folder', path: rootPath })
   }, [])
 
   /**
@@ -417,6 +419,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
     const name = path.split(/[/\\]/).pop() ?? path
     addRecent({ type: 'file', path, name })
+    saveLastSession({ type: 'file', path })
   }, [])
 
   /**
@@ -538,6 +541,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       switchToLocal()
     }
     dispatch({ type: 'CLOSE_WORKSPACE' })
+    // The user chose the welcome page — next launch should respect that
+    // instead of bouncing them back into the workspace they just left.
+    clearLastSession()
   }, [])
 
   const setBuffer = useCallback((buffer: string) => {
@@ -746,6 +752,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void openFolderAt(path)
     })
   }, [openFolderAt])
+
+  // Session restore: reopen whatever was open when the app last quit.
+  // Skipped when main queued an initial action for this window (file
+  // association / "open with"), which must win over the remembered
+  // session. A vanished path clears the record and falls back to the
+  // welcome page silently.
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    if (ipc.hasInitialAction()) return
+    if (stateRef.current.workspace || stateRef.current.currentFile) return
+    const last = getLastSession()
+    if (!last) return
+    const reopen = last.type === 'folder' ? openFolderAt : openFileAt
+    void reopen(last.path).catch((err) => {
+      console.warn('session restore failed, clearing record', last, err)
+      clearLastSession()
+    })
+  }, [openFolderAt, openFileAt])
 
   const value = useMemo<Ctx>(
     () => ({
