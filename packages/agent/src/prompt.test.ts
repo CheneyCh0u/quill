@@ -40,6 +40,14 @@ describe('buildSystemPrompt', () => {
     expect(p).toMatch(/prefer apply_edit|apply_edit.*small|small.*apply_edit/i)
   })
 
+  it('workspace mode declares delete tools with a permanence warning', () => {
+    const scope: Scope = { kind: 'workspace', root: '/r' }
+    const p = buildSystemPrompt(scope)
+    expect(p).toContain('delete_file')
+    expect(p).toContain('delete_dir')
+    expect(p).toMatch(/permanent/i)
+  })
+
   it('single-file mode declares write_file and apply_edit but not create_file', () => {
     const scope: Scope = { kind: 'single-file', path: '/r/x.md' }
     const p = buildSystemPrompt(scope)
@@ -47,6 +55,9 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('apply_edit')
     // create_file is meaningless when scope is exactly one file.
     expect(p).not.toContain('create_file')
+    // Deleting the one open file is not a supported flow.
+    expect(p).not.toContain('delete_file')
+    expect(p).not.toContain('delete_dir')
   })
 
   it('single-file mode pins the exact file path', () => {

@@ -74,6 +74,11 @@ export function buildSystemPrompt(
         'path already exists; use write_file instead in that case.'
     )
     lines.push(
+      '- delete_file(path): delete a single file. delete_dir(path): delete a ' +
+        'folder recursively. Deletion is permanent (no trash) — only call ' +
+        'these when the user clearly asked to remove something.'
+    )
+    lines.push(
       'If the user rejects an approval, the tool returns an error — do not ' +
         'silently retry the same call; ask the user what to change first.'
     )

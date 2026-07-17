@@ -392,6 +392,84 @@ export function makeTools(
       }
     }),
 
+    delete_file: tool({
+      description:
+        'Delete a single file inside scope. Errors if the path is a directory — use delete_dir for folders. The user must approve before disk is touched. Deletion is permanent (no trash).',
+      inputSchema: z.object({
+        path: z.string().describe('Absolute or scope-relative path to the file')
+      }),
+      execute: async ({ path }, { toolCallId }) => {
+        let abs: string
+        try {
+          abs = resolveInScope(scope, path)
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        }
+        // Pre-check so we never ask the user to approve a doomed call.
+        const stat = await fs.stat(abs).catch(() => null)
+        if (!stat) {
+          return { ok: false, error: `path not found: ${abs}` }
+        }
+        if (stat.isDirectory()) {
+          return { ok: false, error: `"${path}" is a directory — use delete_dir instead` }
+        }
+        const decision = await requestApproval(toolCallId, {
+          kind: 'delete_file',
+          path: abs
+        })
+        if (!decision.approved) {
+          return { ok: false, error: decision.reason ?? 'user denied' }
+        }
+        try {
+          await fs.rm(abs)
+          return { ok: true, path: abs }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      }
+    }),
+
+    delete_dir: tool({
+      description:
+        'Delete a folder and everything inside it, recursively, inside scope. Errors if the path is a file — use delete_file instead. The user must approve before disk is touched. Deletion is permanent (no trash).',
+      inputSchema: z.object({
+        path: z.string().describe('Absolute or scope-relative path to the folder')
+      }),
+      execute: async ({ path }, { toolCallId }) => {
+        let abs: string
+        try {
+          abs = resolveInScope(scope, path)
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        }
+        if (scope.kind === 'workspace' && abs === scope.root) {
+          return { ok: false, error: 'cannot delete the scope root folder' }
+        }
+        const stat = await fs.stat(abs).catch(() => null)
+        if (!stat) {
+          return { ok: false, error: `path not found: ${abs}` }
+        }
+        if (!stat.isDirectory()) {
+          return { ok: false, error: `"${path}" is a file — use delete_file instead` }
+        }
+        const entryCount = (await fs.readdir(abs, { recursive: true })).length
+        const decision = await requestApproval(toolCallId, {
+          kind: 'delete_dir',
+          path: abs,
+          entryCount
+        })
+        if (!decision.approved) {
+          return { ok: false, error: decision.reason ?? 'user denied' }
+        }
+        try {
+          await fs.rm(abs, { recursive: true })
+          return { ok: true, path: abs }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        }
+      }
+    }),
+
     web_fetch: tool({
       description:
         "Fetch a URL and return its text content. Use this when the user pastes a link or refers to one. Returns ok:false on errors (bad URL, blocked private/loopback host, non-2xx status, network failure, unsupported content type like PDF or images); surface the error to the user instead of silently retrying. HTML pages are stripped of script/style/nav and title is extracted. Content capped at ~50KB.",
