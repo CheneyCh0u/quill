@@ -96,7 +96,14 @@ function formatContext(tokens: number): string {
   return Math.round(tokens / 1000) + 'K'
 }
 
-const WRITE_TOOL_NAMES = new Set(['write_file', 'apply_edit', 'create_file'])
+const WRITE_TOOL_NAMES = new Set([
+  'write_file',
+  'apply_edit',
+  'create_file',
+  'delete_file',
+  'delete_dir'
+])
+const DELETE_TOOL_NAMES = new Set(['delete_file', 'delete_dir'])
 
 /**
  * Parse a slash command prefix to force a routing mode. `/plan ...` and
@@ -384,7 +391,9 @@ export function AgentPanel({ onClose }: Props) {
           // the reducer pure.
           const wr = event.result as { ok?: boolean; path?: string } | undefined
           if (wr?.ok === true && wr.path) {
-            if (wr.path === curPathRef.current) {
+            // A deleted path no longer exists on disk — reloading it would
+            // error. The sidebar refresh below is what removes the entry.
+            if (wr.path === curPathRef.current && !DELETE_TOOL_NAMES.has(event.name)) {
               void reloadCurrentFile(wr.path)
             }
             // Also refresh the workspace tree so a `create_file` shows up in
@@ -1386,23 +1395,30 @@ function ApprovalCardView({
   const path = String(payload.path ?? '')
   const [contentOpen, setContentOpen] = useState(status === 'pending')
 
-  const icon =
-    toolName === 'create_file' ? (
-      <FilePlus className="w-3.5 h-3.5" />
-    ) : toolName === 'apply_edit' ? (
-      <FilePen className="w-3.5 h-3.5" />
-    ) : (
-      <FileText className="w-3.5 h-3.5" />
-    )
+  const isDelete = toolName === 'delete_file' || toolName === 'delete_dir'
+
+  const icon = isDelete ? (
+    <Trash2 className="w-3.5 h-3.5" />
+  ) : toolName === 'create_file' ? (
+    <FilePlus className="w-3.5 h-3.5" />
+  ) : toolName === 'apply_edit' ? (
+    <FilePen className="w-3.5 h-3.5" />
+  ) : (
+    <FileText className="w-3.5 h-3.5" />
+  )
 
   const title =
-    toolName === 'create_file'
-      ? '新建文件'
-      : toolName === 'apply_edit'
-        ? '编辑文件'
-        : toolName === 'write_file'
-          ? '覆写文件'
-          : '写入'
+    toolName === 'delete_file'
+      ? '删除文件'
+      : toolName === 'delete_dir'
+        ? '删除文件夹'
+        : toolName === 'create_file'
+          ? '新建文件'
+          : toolName === 'apply_edit'
+            ? '编辑文件'
+            : toolName === 'write_file'
+              ? '覆写文件'
+              : '写入'
 
   const borderColor =
     status === 'pending'
@@ -1424,11 +1440,13 @@ function ApprovalCardView({
         </span>
         {status === 'approved' && !resultError && (
           <span className="text-[11px] text-[var(--ink-soft)] flex items-center gap-1">
-            <Check className="w-3 h-3" /> 已应用
+            <Check className="w-3 h-3" /> {isDelete ? '已删除' : '已应用'}
           </span>
         )}
         {status === 'approved' && resultError && (
-          <span className="text-[11px] text-[var(--accent)]">写入失败</span>
+          <span className="text-[11px] text-[var(--accent)]">
+            {isDelete ? '删除失败' : '写入失败'}
+          </span>
         )}
         {status === 'rejected' && (
           <span className="text-[11px] text-[var(--ink-faint)] font-serif-zh italic">
@@ -1437,7 +1455,13 @@ function ApprovalCardView({
         )}
       </div>
 
-      {toolName === 'apply_edit' ? (
+      {isDelete ? (
+        <div className="px-3 py-2 text-[11px] text-[var(--ink-soft)]">
+          {toolName === 'delete_dir'
+            ? `将递归删除该文件夹（含 ${Number(payload.entryCount ?? 0)} 项），不可撤销。`
+            : '将永久删除该文件，不可撤销。'}
+        </div>
+      ) : toolName === 'apply_edit' ? (
         <ApplyEditPreview
           oldText={String(payload.old_text ?? '')}
           newText={String(payload.new_text ?? '')}
