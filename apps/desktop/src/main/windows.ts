@@ -37,7 +37,11 @@ export function createWindow(opts: { initial?: InitialAction } = {}): BrowserWin
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Lets the renderer know an initial action (file association, menu
+      // "new window with file") is on its way, so session restore stays
+      // out of that window instead of racing the queued open.
+      additionalArguments: opts.initial ? ['--quill-has-initial'] : []
     }
   })
 
