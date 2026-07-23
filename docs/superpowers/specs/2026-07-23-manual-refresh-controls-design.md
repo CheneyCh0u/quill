@@ -44,6 +44,9 @@ The result is handled as follows:
 | Yes | No | Keep the unsaved editor buffer |
 | Yes | Yes | Ask before replacing both values with disk content |
 
+If both sides changed but now contain the same text, there is no conflict.
+Adopt that text as the new clean disk baseline without prompting.
+
 The conflict prompt explains that continuing discards unsaved changes in
 Quill. Cancelling leaves both the editor buffer and its original disk baseline
 unchanged. Confirming replaces both with the newly read disk content, leaving
