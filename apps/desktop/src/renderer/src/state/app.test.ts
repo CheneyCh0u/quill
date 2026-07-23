@@ -79,6 +79,35 @@ describe('RELOAD_CURRENT_FILE', () => {
   })
 })
 
+describe('APPLY_FILE_REFRESH', () => {
+  it('replaces both disk baseline and dirty buffer for a confirmed manual refresh', () => {
+    const next = reducer(
+      {
+        workspace: null,
+        currentFile: { path: '/r/a.md', content: 'old', buffer: 'editor' },
+        viewMode: 'split',
+        sidebarCollapsed: false,
+        saving: false
+      },
+      { type: 'APPLY_FILE_REFRESH', path: '/r/a.md', content: 'disk' }
+    )
+    expect(next.currentFile).toEqual({ path: '/r/a.md', content: 'disk', buffer: 'disk' })
+  })
+
+  it('is a no-op after the user switches files', () => {
+    const before = {
+      workspace: null,
+      currentFile: { path: '/r/b.md', content: 'b', buffer: 'b' },
+      viewMode: 'split' as const,
+      sidebarCollapsed: false,
+      saving: false
+    }
+    expect(
+      reducer(before, { type: 'APPLY_FILE_REFRESH', path: '/r/a.md', content: 'disk' })
+    ).toEqual(before)
+  })
+})
+
 describe('REFRESH_TREE', () => {
   it('replaces the workspace tree, preserving root + name', () => {
     const oldTree = [node('a.md', '/r/a.md')]
