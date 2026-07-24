@@ -4,6 +4,7 @@ import { getFileType } from '@quill/shared-types'
 import { useApp } from '../state/app'
 import { ModeSwitcher } from './ModeSwitcher'
 import { ExportMenu } from './ExportMenu'
+import { RefreshButton } from './RefreshButton'
 
 function splitPath(path: string): { dir: string | null; name: string } {
   const segs = path.split(/[/\\]/)
@@ -13,7 +14,15 @@ function splitPath(path: string): { dir: string | null; name: string } {
 }
 
 export function PaneHeader() {
-  const { state, mode, dirty, setViewMode, toggleSidebar, renameCurrentFile } = useApp()
+  const {
+    state,
+    mode,
+    dirty,
+    setViewMode,
+    toggleSidebar,
+    renameCurrentFile,
+    refreshCurrentFile
+  } = useApp()
   const cur = state.currentFile
   const showExpand = mode === 'workspace' && state.sidebarCollapsed
   const hasPath = !!cur?.path
@@ -25,13 +34,30 @@ export function PaneHeader() {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // When path changes (switched files), exit any in-flight edit.
   useEffect(() => {
     setEditing(false)
     setError(null)
+    setRefreshError(false)
   }, [cur?.path])
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    setRefreshError(false)
+    try {
+      await refreshCurrentFile()
+    } catch (err) {
+      console.error('file refresh failed', err)
+      setRefreshError(true)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refreshing, refreshCurrentFile])
 
   const startEditing = useCallback(() => {
     if (!cur?.path) return
@@ -125,6 +151,14 @@ export function PaneHeader() {
                 title="未保存"
               />
             )}
+            {refreshError && (
+              <span
+                aria-live="polite"
+                className="font-serif-zh text-[12px] text-[var(--accent)] shrink-0"
+              >
+                刷新失败
+              </span>
+            )}
           </>
         )}
 
@@ -165,6 +199,14 @@ export function PaneHeader() {
 
       {cur && (
         <>
+          {hasPath && (
+            <RefreshButton
+              label={refreshError ? '重试刷新文件' : '刷新文件'}
+              refreshing={refreshing}
+              onClick={() => void handleRefresh()}
+              size="regular"
+            />
+          )}
           {isMarkdownFile && (
             <ModeSwitcher value={state.viewMode} onChange={setViewMode} />
           )}

@@ -22,6 +22,7 @@ import { addRecent, removeRecent } from '../lib/recent'
 import { clearLastSession, getLastSession, saveLastSession } from '../lib/session'
 import { validateRenameTarget } from '../lib/rename'
 import { joinTreePath, validateNewEntryName } from '../lib/tree-paths'
+import { refreshFileFromDisk } from '../lib/file-refresh'
 import { usePrefs } from './prefs'
 
 type Workspace = {
@@ -84,6 +85,7 @@ type Action =
   | { type: 'END_SAVE'; path: string; content: string }
   | { type: 'SAVE_FAILED' }
   | { type: 'RELOAD_CURRENT_FILE'; path: string; content: string }
+  | { type: 'APPLY_FILE_REFRESH'; path: string; content: string }
   | { type: 'REFRESH_TREE'; tree: FileNode[] }
   | { type: 'RENAME_FILE'; oldPath: string; newPath: string; newName: string }
   | { type: 'SET_VIEW_MODE'; mode: ViewMode }
@@ -175,6 +177,12 @@ export function reducer(s: State, a: Action): State {
         }
       }
     }
+    case 'APPLY_FILE_REFRESH':
+      if (!s.currentFile || s.currentFile.path !== a.path) return s
+      return {
+        ...s,
+        currentFile: { ...s.currentFile, content: a.content, buffer: a.content }
+      }
     case 'RENAME_FILE': {
       const updateTree = (nodes: FileNode[]): FileNode[] =>
         nodes.map((n) => {
@@ -274,6 +282,9 @@ type Ctx = {
    *  while it's open. Path-guarded so a stale event after a window switch
    *  doesn't clobber a different file. */
   reloadCurrentFile: (path: string) => Promise<void>
+  /** Manually refresh the current file from disk. Prompts only when both
+   *  the editor buffer and disk changed from Quill's known baseline. */
+  refreshCurrentFile: () => Promise<void>
   /** Re-scan the workspace folder and refresh the sidebar tree. Triggered
    *  after the agent creates / writes files so newly-created entries appear
    *  immediately. No-op outside workspace mode. */
@@ -628,6 +639,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  const refreshCurrentFile = useCallback(async () => {
+    await refreshFileFromDisk({
+      getCurrentFile: () => stateRef.current.currentFile,
+      read: (path) => ipc.vault.read(path),
+      confirmConflict: () =>
+        askConfirm({
+          title: '文件已在其他地方修改',
+          message: '刷新会丢弃 Quill 中尚未保存的修改，是否继续？',
+          confirmLabel: '重新加载',
+          cancelLabel: '保留修改'
+        }),
+      apply: (path, content) => dispatch({ type: 'APPLY_FILE_REFRESH', path, content })
+    })
+  }, [askConfirm])
+
   // True when `filePath` is inside `dirPath` (or equal to it). Used to
   // decide whether deleting / renaming a directory should also close the
   // currently-open file.
@@ -794,6 +820,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleSidebar,
       renameCurrentFile,
       reloadCurrentFile,
+      refreshCurrentFile,
       reloadWorkspaceTree,
       createFileInTree,
       createFolderInTree,
@@ -821,6 +848,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleSidebar,
       renameCurrentFile,
       reloadCurrentFile,
+      refreshCurrentFile,
       reloadWorkspaceTree,
       createFileInTree,
       createFolderInTree,

@@ -1,10 +1,37 @@
+import { useCallback, useState } from 'react'
 import { PanelLeftClose, FolderOpen, X, Cloud } from 'lucide-react'
 import { useApp } from '../state/app'
 import { FileTree } from './FileTree'
 import { CloudWorkspaceSwitcher } from './CloudWorkspaceSwitcher'
+import { RefreshButton } from './RefreshButton'
 
 export function Sidebar() {
-  const { state, dirty, toggleSidebar, openFileAt, openFolder, closeWorkspace } = useApp()
+  const {
+    state,
+    dirty,
+    toggleSidebar,
+    openFileAt,
+    openFolder,
+    closeWorkspace,
+    reloadWorkspaceTree
+  } = useApp()
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    setRefreshError(false)
+    try {
+      await reloadWorkspaceTree()
+    } catch (err) {
+      console.error('workspace refresh failed', err)
+      setRefreshError(true)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refreshing, reloadWorkspaceTree])
+
   if (!state.workspace) return null
   const inRemote = state.workspace.kind === 'remote'
 
@@ -15,15 +42,29 @@ export function Sidebar() {
           {inRemote ? (
             <>
               <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] flex items-center gap-1">
-                <Cloud className="w-2.5 h-2.5 shrink-0" />
-                <span className="truncate">remote · {state.workspace.rootName}</span>
+                {refreshError ? (
+                  <span aria-live="polite" className="text-[var(--accent)]">
+                    刷新失败
+                  </span>
+                ) : (
+                  <>
+                    <Cloud className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">remote · {state.workspace.rootName}</span>
+                  </>
+                )}
               </div>
               <CloudWorkspaceSwitcher />
             </>
           ) : (
             <>
               <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-                workspace
+                {refreshError ? (
+                  <span aria-live="polite" className="text-[var(--accent)]">
+                    刷新失败
+                  </span>
+                ) : (
+                  'workspace'
+                )}
               </div>
               <div
                 className="font-display text-[14px] text-[var(--ink)] truncate mt-0.5"
@@ -34,6 +75,11 @@ export function Sidebar() {
             </>
           )}
         </div>
+        <RefreshButton
+          label={refreshError ? '重试刷新文件树' : '刷新文件树'}
+          refreshing={refreshing}
+          onClick={() => void handleRefresh()}
+        />
         <button
           onClick={openFolder}
           className="no-drag p-1 rounded-md hover:bg-[var(--paper-soft)] text-[var(--ink-faint)] hover:text-[var(--ink)] transition"
