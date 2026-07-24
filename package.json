@@ -10,6 +10,7 @@
     "dev:desktop": "bun --filter @quill/desktop dev",
     "build:desktop": "bun --filter @quill/desktop build",
     "dist:desktop": "bun --filter @quill/desktop dist",
+    "dist:mac:arm64": "bun --filter @quill/desktop dist:mac:arm64",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun test"
   },
