@@ -10,7 +10,7 @@
   font-family: "Geist", "Noto Sans SC", -apple-system, system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.75;
-  max-width: 64ch;
+  overflow-wrap: break-word;
 }
 
 .prose-paper h1 {
@@ -179,10 +179,18 @@
   margin: 2rem 0;
 }
 
-.prose-paper table {
-  width: 100%;
-  border-collapse: collapse;
+/* Tables size to their content and pan horizontally inside .table-wrap
+ * (see markdown.ts) instead of hard-wrapping every cell into the measure. */
+.prose-paper .table-wrap {
+  overflow-x: auto;
   margin: 0 0 1rem;
+}
+
+.prose-paper table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  margin: 0;
   font-family: "Geist", "Noto Sans SC", sans-serif;
   font-size: 0.9rem;
 }
@@ -192,6 +200,7 @@
   padding: 0.5rem 0.7rem;
   border: 1px solid var(--rule);
   text-align: left;
+  max-width: 32ch;
 }
 
 .prose-paper th {

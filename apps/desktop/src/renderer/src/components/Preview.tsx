@@ -13,9 +13,9 @@ export function Preview({ value, scrollRef }: Props) {
   return (
     <div
       ref={scrollRef}
-      className="h-full w-full overflow-auto px-10 py-10 bg-[var(--paper-dim)]"
+      className="h-full w-full overflow-auto pl-[clamp(2.5rem,17%,280px)] pr-[min(max(17%,272px),45%,280px)] py-10 bg-[var(--paper-dim)]"
     >
-      <div className="prose-paper mx-auto" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="prose-paper" dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   )
 }

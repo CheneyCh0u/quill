@@ -22,4 +22,10 @@ describe('render', () => {
     const b = render('# Foo\n## Foo')
     expect(a).toBe(b)
   })
+
+  it('wraps tables in a horizontal-scroll container', () => {
+    const html = render('| a | b |\n| --- | --- |\n| 1 | 2 |')
+    expect(html).toContain('<div class="table-wrap"><table>')
+    expect(html).toContain('</table></div>')
+  })
 })
