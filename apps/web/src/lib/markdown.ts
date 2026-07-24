@@ -47,6 +47,11 @@ md.renderer.rules.heading_open = (tokens, idx) => {
   return `<${open.tag} id="${slug}">`
 }
 
+// Wrap tables in a scroll container so wide tables pan horizontally inside
+// .table-wrap (styled in prose-paper.css) instead of overflowing the pane.
+md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
+md.renderer.rules.table_close = () => '</table></div>\n'
+
 export function renderMarkdown(src: string): string {
   // env is per-render so duplicate-slug counters reset between calls.
   return md.render(src, { slugCounts: new Map<string, number>() })

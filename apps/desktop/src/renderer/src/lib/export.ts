@@ -77,6 +77,13 @@ ${css}
 pre, blockquote, table { page-break-inside: avoid; }
 h1, h2, h3, h4 { page-break-after: avoid; }
 img { max-width: 100%; height: auto; }
+
+/* Paper can't scroll: on print, tables fall back to full-width wrapping */
+@media print {
+  .prose-paper .table-wrap { overflow-x: visible; }
+  .prose-paper table { width: 100%; }
+  .prose-paper th, .prose-paper td { max-width: none; }
+}
 </style>
 </head>
 <body data-theme="${theme}">

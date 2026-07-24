@@ -60,6 +60,12 @@ md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
     : self.renderToken(tokens, idx, options)
 }
 
+// Wrap tables in a scroll container: the preview column is a fixed reading
+// measure, so wide tables size to their content and pan horizontally inside
+// .table-wrap instead of crushing every cell into hard wraps.
+md.renderer.rules.table_open = () => '<div class="table-wrap"><table>\n'
+md.renderer.rules.table_close = () => '</table></div>\n'
+
 export function render(source: string): string {
   return md.render(source)
 }
